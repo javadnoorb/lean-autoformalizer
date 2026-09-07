@@ -1,0 +1,2 @@
+export PATH=/home/javad/miniconda3/bin:/home/javad/.elan/bin:/usr/bin:/bin && cd /home/javad/projects/lean-autoformalizer/frontend && npm run dev -- --host 0.0.0.0 --port 3000
+cd /home/javad/projects/lean-autoformalizer/backend && /home/javad/miniconda3/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
