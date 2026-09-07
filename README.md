@@ -29,7 +29,7 @@ A web application that takes informal mathematical theorems stated in plain Engl
 
 ## Quick Start
 
-### 1. Launch Everything with One Click
+### 1. Launch Everything with One Click (Windows)
 Double-click `start.bat` in the project root, or run in PowerShell:
 ```powershell
 .\start.bat
@@ -37,15 +37,21 @@ Double-click `start.bat` in the project root, or run in PowerShell:
 
 ### 2. Manual Launch
 
-**Backend (FastAPI in WSL2):**
+Set your project root directory first:
 ```bash
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/javad/.gemini/antigravity/scratch/lean-autoformalizer/backend && /home/javad/miniconda3/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+cd /path/to/lean-autoformalizer
+```
+
+**Backend (FastAPI):**
+```bash
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Backend API docs will be live at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 **Frontend (React + Vite):**
-```powershell
-cd C:\Users\javad\.gemini\antigravity\scratch\lean-autoformalizer\frontend
+```bash
+cd /path/to/lean-autoformalizer/frontend
 npm run dev
 ```
 Open browser at: [http://localhost:3000](http://localhost:3000)
@@ -54,13 +60,14 @@ Open browser at: [http://localhost:3000](http://localhost:3000)
 
 ## Running Tests
 
-To run the backend test suite inside WSL2:
+To run the backend test suite:
 ```bash
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/javad/.gemini/antigravity/scratch/lean-autoformalizer/backend && PYTHONPATH=. /home/javad/miniconda3/bin/pytest -v"
+cd /path/to/lean-autoformalizer/backend
+PYTHONPATH=. pytest -v
 ```
 
 To build the frontend production bundle:
-```powershell
-cd C:\Users\javad\.gemini\antigravity\scratch\lean-autoformalizer\frontend
+```bash
+cd /path/to/lean-autoformalizer/frontend
 npm run build
 ```
