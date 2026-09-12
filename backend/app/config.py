@@ -7,12 +7,15 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     # Lean 4 execution configuration
-    USE_WSL: bool = os.getenv("USE_WSL", "true").lower() in ("true", "1", "yes")
-    WSL_DISTRO: str = os.getenv("WSL_DISTRO", "Ubuntu")
-    LEAN_BIN_WSL: str = os.getenv("LEAN_BIN_WSL", "~/.elan/bin/lean")
-    LAKE_BIN_WSL: str = os.getenv("LAKE_BIN_WSL", "~/.elan/bin/lake")
-    LEAN_BIN_LOCAL: str = os.getenv("LEAN_BIN_LOCAL", "lean")
-    
+    LEAN_BIN: str = os.getenv("LEAN_BIN", "~/.elan/bin/lean")
+    LAKE_BIN: str = os.getenv("LAKE_BIN", "~/.elan/bin/lake")
+
+    # Path to a Lake project with Mathlib already built (its .lake/build contains
+    # Mathlib.olean). When set, Lean code is run via `lake env lean` from inside
+    # this directory so imports like `Mathlib.Tactic.Ring` resolve. Leave empty
+    # to run bare `lean` with no extra library search path.
+    LEAN_PROJECT_DIR: str = os.getenv("LEAN_PROJECT_DIR", "")
+
     LEAN_TIMEOUT_SECS: int = int(os.getenv("LEAN_TIMEOUT_SECS", "15"))
     ALLOW_MOCK_FALLBACK: bool = os.getenv("ALLOW_MOCK_FALLBACK", "true").lower() in ("true", "1", "yes")
 

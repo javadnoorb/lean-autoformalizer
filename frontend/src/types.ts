@@ -43,8 +43,6 @@ export interface SystemStatus {
   status: string;
   lean_installed: boolean;
   lean_version?: string;
-  wsl_enabled: boolean;
-  distro: string;
   gemini_key_configured: boolean;
   model: string;
 }

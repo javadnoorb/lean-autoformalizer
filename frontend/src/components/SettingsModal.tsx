@@ -91,15 +91,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </select>
         </div>
 
-        {/* Lean 4 & WSL2 Environment Status */}
+        {/* Lean 4 Environment Status */}
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5 space-y-2 text-xs">
           <div className="flex items-center space-x-1.5 text-slate-300 font-medium">
             <Terminal className="w-4 h-4 text-emerald-400" />
             <span>Execution Environment</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-slate-400 font-mono text-[11px] pt-1">
-            <div>Mode: <span className="text-slate-200">{status?.wsl_enabled ? 'WSL2' : 'Local'}</span></div>
-            <div>Distro: <span className="text-slate-200">{status?.distro || 'Ubuntu'}</span></div>
+            <div>Status: <span className="text-slate-200">{status?.lean_installed ? 'Installed' : 'Mock'}</span></div>
             <div className="col-span-2">
               Lean 4: <span className="text-slate-200">{status?.lean_version || 'Checking / Initializing...'}</span>
             </div>

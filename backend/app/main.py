@@ -40,8 +40,6 @@ def get_status():
         status="online",
         lean_installed=lean_stat["installed"],
         lean_version=lean_stat.get("version"),
-        wsl_enabled=settings.USE_WSL,
-        distro=settings.WSL_DISTRO,
         gemini_key_configured=has_gemini,
         model=settings.GEMINI_MODEL,
     )

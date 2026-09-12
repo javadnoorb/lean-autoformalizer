@@ -24,7 +24,7 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
             <div className="flex items-center space-x-2">
               <h1 className="font-semibold text-slate-100 text-lg tracking-tight">Lean 4 Autoformalizer</h1>
               <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                v1.0 • WSL2
+                v1.0
               </span>
             </div>
             <p className="text-xs text-slate-400">Plain English Theorem Formalization & Automated Proof Search</p>
@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
             ) : (
               <div className="flex items-center space-x-1 text-amber-400" title="Initializing toolchain or using fallback validator">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>WSL2 / Mock</span>
+                <span>Mock</span>
               </div>
             )}
           </div>
