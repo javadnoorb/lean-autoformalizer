@@ -10,55 +10,53 @@ from app.models.schemas import LeanDiagnostic, VerifyResponse
 
 class LeanRunner:
     def __init__(self):
-        self.is_linux = (os.name != 'nt')
-        self.use_wsl = settings.USE_WSL and not self.is_linux
-        self.wsl_distro = settings.WSL_DISTRO
-        self.lean_bin_wsl = settings.LEAN_BIN_WSL
         self.timeout = settings.LEAN_TIMEOUT_SECS
 
     def _get_lean_exec_path(self) -> str:
-        if self.is_linux:
-            expanded = os.path.expanduser(self.lean_bin_wsl)
-            if os.path.exists(expanded):
-                return expanded
-            lean_which = shutil.which("lean")
-            if lean_which:
-                return lean_which
+        expanded = os.path.expanduser(settings.LEAN_BIN)
+        if os.path.exists(expanded):
             return expanded
-        return settings.LEAN_BIN_LOCAL
+        lean_which = shutil.which("lean")
+        if lean_which:
+            return lean_which
+        return expanded
+
+    def _get_lake_exec_path(self) -> str:
+        expanded = os.path.expanduser(settings.LAKE_BIN)
+        if os.path.exists(expanded):
+            return expanded
+        lake_which = shutil.which("lake")
+        if lake_which:
+            return lake_which
+        return expanded
+
+    def _get_project_dir(self) -> str:
+        """Return the configured Mathlib Lake project dir, or '' if unset/missing."""
+        if not settings.LEAN_PROJECT_DIR:
+            return ""
+        expanded = os.path.expanduser(settings.LEAN_PROJECT_DIR)
+        return expanded if os.path.isdir(expanded) else ""
+
+    def _build_lean_cmd(self, extra_args: List[str]) -> Tuple[List[str], str]:
+        """Build the command to invoke Lean, using `lake env lean` inside the
+        configured Mathlib project dir when available, otherwise bare `lean`.
+        Returns (cmd, cwd)."""
+        project_dir = self._get_project_dir()
+        if project_dir:
+            return ([self._get_lake_exec_path(), "env", "lean"] + extra_args, project_dir)
+        return ([self._get_lean_exec_path()] + extra_args, "")
 
     def get_system_status(self) -> Dict[str, Any]:
-        """Check if Lean 4 is installed and accessible via WSL or locally."""
+        """Check if Lean 4 is installed and accessible."""
         try:
-            if self.is_linux:
-                cmd = [self._get_lean_exec_path(), "--version"]
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if res.returncode == 0:
-                    return {
-                        "installed": True,
-                        "version": res.stdout.strip(),
-                        "mode": "wsl_native",
-                        "distro": self.wsl_distro
-                    }
-            elif self.use_wsl:
-                cmd = ["wsl", "-d", self.wsl_distro, "--", "bash", "-c", f"{self.lean_bin_wsl} --version"]
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if res.returncode == 0:
-                    return {
-                        "installed": True,
-                        "version": res.stdout.strip(),
-                        "mode": "wsl",
-                        "distro": self.wsl_distro
-                    }
-            else:
-                res = subprocess.run([settings.LEAN_BIN_LOCAL, "--version"], capture_output=True, text=True, timeout=5)
-                if res.returncode == 0:
-                    return {
-                        "installed": True,
-                        "version": res.stdout.strip(),
-                        "mode": "local",
-                        "distro": ""
-                    }
+            cmd, cwd = self._build_lean_cmd(["--version"])
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, cwd=cwd or None)
+            if res.returncode == 0:
+                return {
+                    "installed": True,
+                    "version": res.stdout.strip(),
+                    "mode": "native",
+                }
         except Exception:
             pass
 
@@ -66,16 +64,7 @@ class LeanRunner:
             "installed": False,
             "version": None,
             "mode": "mock" if settings.ALLOW_MOCK_FALLBACK else "unavailable",
-            "distro": self.wsl_distro if self.use_wsl else ""
         }
-
-    def _windows_to_wsl_path(self, win_path: str) -> str:
-        """Convert C:\\path\\to\\file into /mnt/c/path/to/file."""
-        p = os.path.abspath(win_path).replace("\\", "/")
-        if len(p) >= 2 and p[1] == ":":
-            drive = p[0].lower()
-            return f"/mnt/{drive}{p[2:]}"
-        return p
 
     def run_lean_code(self, code: str) -> Tuple[bool, List[LeanDiagnostic], List[str]]:
         """
@@ -88,23 +77,14 @@ class LeanRunner:
             temp_path = f.name
 
         try:
-            if self.is_linux:
-                cmd = [self._get_lean_exec_path(), "--json", temp_path]
-            elif self.use_wsl:
-                wsl_path = self._windows_to_wsl_path(temp_path)
-                # Command to invoke lean inside WSL
-                cmd = [
-                    "wsl", "-d", self.wsl_distro, "--", "bash", "-c",
-                    f"{self.lean_bin_wsl} --json '{wsl_path}'"
-                ]
-            else:
-                cmd = [settings.LEAN_BIN_LOCAL, "--json", temp_path]
+            cmd, cwd = self._build_lean_cmd(["--json", temp_path])
 
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=self.timeout
+                timeout=self.timeout,
+                cwd=cwd or None
             )
 
             stdout = result.stdout

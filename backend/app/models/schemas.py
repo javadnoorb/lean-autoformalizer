@@ -59,7 +59,5 @@ class SystemStatusResponse(BaseModel):
     status: str
     lean_installed: bool
     lean_version: Optional[str] = None
-    wsl_enabled: bool
-    distro: str
     gemini_key_configured: bool
     model: str

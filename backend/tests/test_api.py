@@ -14,7 +14,6 @@ def test_status():
     assert response.status_code == 200
     data = response.json()
     assert "lean_installed" in data
-    assert "wsl_enabled" in data
 
 def test_examples():
     response = client.get("/api/examples")

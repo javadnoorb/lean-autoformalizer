@@ -11,7 +11,7 @@ A web application that takes informal mathematical theorems stated in plain Engl
   - Generates self-contained definitions and idiomatic theorem signatures ending with `:= by sorry`.
   - Powered by Gemini 2.5 (`google-genai` SDK) with few-shot Mathlib-aligned prompts and automatic compiler error self-repair.
 - **Lean 4 Verification & Goal Inspection**:
-  - Runs Lean 4.33 native toolchain via WSL2 Ubuntu.
+  - Runs the native Lean 4.33 toolchain on Linux.
   - Real-time compiler diagnostics (line & column error markers, warnings).
   - Emulates the **Lean Infoview**: renders open tactic states (`⊢ ...`) and hypothesis contexts.
 - **Automated Theorem Prover**:
@@ -29,29 +29,44 @@ A web application that takes informal mathematical theorems stated in plain Engl
 
 ## Quick Start
 
-### 1. Launch Everything with One Click (Windows)
-Double-click `start.bat` in the project root, or run in PowerShell:
-```powershell
-.\start.bat
-```
+These instructions target Linux (including WSL2). Everything runs natively — no Windows-specific tooling is needed.
 
-### 2. Manual Launch
+### Prerequisites
 
-Set your project root directory first:
+- **Python 3.12+** and `pip`
+- **Node.js 18+** and `npm`
+- **Lean 4 toolchain** via [elan](https://github.com/leanprover/elan):
+  ```bash
+  curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
+  source "$HOME/.elan/env"
+  lean --version
+  ```
+
+### 1. Configure environment variables
+
+Create a `.env` file in `backend/` (see `backend/app/config.py` for all options):
 ```bash
-cd /path/to/lean-autoformalizer
+GEMINI_API_KEY=your-gemini-api-key
+LEAN_BIN=~/.elan/bin/lean
 ```
 
-**Backend (FastAPI):**
+### 2. Backend (FastAPI)
+
 ```bash
 cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Backend API docs will be live at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-**Frontend (React + Vite):**
+### 3. Frontend (React + Vite)
+
+In a separate terminal:
 ```bash
-cd /path/to/lean-autoformalizer/frontend
+cd frontend
+npm install
 npm run dev
 ```
 Open browser at: [http://localhost:3000](http://localhost:3000)
