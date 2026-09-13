@@ -53,7 +53,7 @@ export const App: React.FC = () => {
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('GEMINI_MODEL') || 'gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('GEMINI_MODEL') || 'gemini-3.6-flash');
 
   // Load initial metadata on mount
   useEffect(() => {
