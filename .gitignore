@@ -25,3 +25,9 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Vultr VM state
+deploy/.vultr-instance-id
+
+# Generated from Caddyfile.template using the VM's current public IP
+/Caddyfile
