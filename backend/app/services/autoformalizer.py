@@ -9,6 +9,7 @@ from app.prompts.autoformalize import (
     build_autoformalize_prompt,
 )
 from app.services.lean_runner import lean_runner
+from app.services.gemini_utils import generate_content_with_retry
 
 class AutoformalizerService:
     def __init__(self):
@@ -46,7 +47,8 @@ class AutoformalizerService:
         contents.append({"role": "user", "parts": [{"text": prompt_text}]})
 
         try:
-            response = client.models.generate_content(
+            response = generate_content_with_retry(
+                client,
                 model=model_name,
                 contents=contents,
                 config={
@@ -99,7 +101,8 @@ Please fix the Lean 4 code so it compiles with standard Lean 4 types and ends wi
         repair_contents.append({"role": "user", "parts": [{"text": repair_prompt}]})
 
         try:
-            res = client.models.generate_content(
+            res = generate_content_with_retry(
+                client,
                 model=model_name,
                 contents=repair_contents,
                 config={"response_mime_type": "application/json", "temperature": 0.0}
