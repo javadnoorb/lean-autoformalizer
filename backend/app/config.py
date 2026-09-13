@@ -5,7 +5,14 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-    
+
+    # Total attempts (including the first) for a Gemini call that hits a
+    # transient error (server overload, short-lived rate limit) before giving
+    # up. Each retry is a billed API call, so this is intentionally low by
+    # default -- raise it if you want more resilience and are fine paying for
+    # the extra attempts.
+    GEMINI_MAX_RETRIES: int = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
+
     # Lean 4 execution configuration
     LEAN_BIN: str = os.getenv("LEAN_BIN", "~/.elan/bin/lean")
     LAKE_BIN: str = os.getenv("LAKE_BIN", "~/.elan/bin/lake")

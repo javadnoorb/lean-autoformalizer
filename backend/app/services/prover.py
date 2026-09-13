@@ -5,6 +5,7 @@ from app.config import settings
 from app.models.schemas import ProveRequest, ProveResponse, ProofStep, LeanDiagnostic
 from app.prompts.proof_search import FAST_HAMMER_TACTICS, build_proof_prompt, PROOF_SEARCH_SYSTEM_PROMPT
 from app.services.lean_runner import lean_runner
+from app.services.gemini_utils import generate_content_with_retry
 
 class ProverService:
     def __init__(self):
@@ -118,7 +119,8 @@ class ProverService:
             prompt = build_proof_prompt(original_code)
 
             t_start = time.time()
-            response = client.models.generate_content(
+            response = generate_content_with_retry(
+                client,
                 model=req.model or settings.GEMINI_MODEL,
                 contents=[
                     {"role": "user", "parts": [{"text": PROOF_SEARCH_SYSTEM_PROMPT}]},
