@@ -14,10 +14,10 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-40 px-6 py-3.5">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         {/* Left Branding */}
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
             <span className="font-mono text-white font-bold text-lg">∀</span>
           </div>
           <div>
@@ -27,12 +27,12 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
                 v1.0
               </span>
             </div>
-            <p className="text-xs text-slate-400">Plain English Theorem Formalization & Automated Proof Search</p>
+            <p className="text-xs text-slate-400 hidden sm:block">Plain English Theorem Formalization & Automated Proof Search</p>
           </div>
         </div>
 
         {/* Right Status Badges & Controls */}
-        <div className="flex items-center space-x-4 text-xs">
+        <div className="flex items-center flex-wrap gap-2 text-xs">
           {/* Lean Status */}
           <div className="flex items-center space-x-2 px-3 py-1.5 rounded-md bg-slate-900 border border-slate-800">
             <Terminal className="w-3.5 h-3.5 text-slate-400" />

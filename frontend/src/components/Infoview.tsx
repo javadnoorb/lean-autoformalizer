@@ -23,7 +23,7 @@ export const Infoview: React.FC<InfoviewProps> = ({
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden shadow-md flex flex-col h-[520px]">
       {/* Header with Tabs & Status Badge */}
-      <div className="bg-slate-950 border-b border-slate-800 px-4 py-2 flex items-center justify-between">
+      <div className="bg-slate-950 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center space-x-1">
           <button
             onClick={() => setActiveTab('goals')}

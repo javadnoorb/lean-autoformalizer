@@ -75,7 +75,7 @@ export const LeanEditor: React.FC<LeanEditorProps> = ({
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden shadow-md flex flex-col h-[520px]">
       {/* Editor Toolbar */}
-      <div className="bg-slate-950 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between">
+      <div className="bg-slate-950 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center space-x-2">
           <div className="flex space-x-1.5 mr-2">
             <div className="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
@@ -86,7 +86,7 @@ export const LeanEditor: React.FC<LeanEditorProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center flex-wrap gap-2">
           <button
             onClick={handleCopy}
             className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-md transition"

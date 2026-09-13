@@ -80,7 +80,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
       {/* Bottom controls: Domain selector & Formalize Action */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         {/* Domain Hint Pills */}
-        <div className="flex items-center space-x-1.5 text-xs">
+        <div className="flex items-center flex-wrap gap-1.5 text-xs">
           <span className="text-slate-500 mr-1">Domain:</span>
           {domains.map((d) => (
             <button
