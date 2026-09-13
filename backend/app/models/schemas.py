@@ -10,7 +10,6 @@ class LeanDiagnostic(BaseModel):
 class FormalizeRequest(BaseModel):
     english_statement: str = Field(..., description="Theorem in natural English")
     theorem_name: Optional[str] = Field(default=None, description="Optional custom identifier for theorem")
-    domain_hint: Optional[str] = Field(default=None, description="e.g. 'algebra', 'number_theory', 'logic'")
     api_key: Optional[str] = Field(default=None, description="Optional per-request Gemini API key")
     model: Optional[str] = Field(default=None, description="Gemini model name")
 

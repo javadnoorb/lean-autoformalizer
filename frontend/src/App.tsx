@@ -14,35 +14,69 @@ import {
 } from './api/client';
 import { SystemStatus, TheoremExample, LeanDiagnostic, ProofStep } from './types';
 
+const SESSION_STORAGE_KEY = 'lean-autoformalizer-session';
+
+interface SessionState {
+  statement: string;
+  leanCode: string;
+  explanation: string;
+  formalizeSource: 'gemini' | 'mock' | null;
+  formalizeSourceDetail?: string;
+  diagnostics: LeanDiagnostic[];
+  goals: string[];
+  isValid: boolean | null;
+  isProven: boolean;
+  steps: ProofStep[];
+  winningTactic?: string;
+  totalDurationMs?: number;
+}
+
+const defaultSession: SessionState = {
+  statement: 'For any natural numbers a and b, (a + b)^2 = a^2 + 2*a*b + b^2',
+  leanCode: 'theorem add_sq_expand (a b : Nat) : (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2 := by\n  sorry',
+  explanation: 'Formalized as standard binomial expansion over natural numbers with Lean 4 exponentiation.',
+  formalizeSource: null,
+  formalizeSourceDetail: undefined,
+  diagnostics: [{ severity: 'warning', line: 2, column: 3, message: "declaration uses 'sorry'" }],
+  goals: ['⊢ (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2'],
+  isValid: true,
+  isProven: false,
+  steps: [],
+  winningTactic: undefined,
+  totalDurationMs: undefined,
+};
+
+function loadSession(): SessionState {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? { ...defaultSession, ...JSON.parse(raw) } : defaultSession;
+  } catch {
+    return defaultSession;
+  }
+}
+
 export const App: React.FC = () => {
+  const initialSession = loadSession();
+
   // Application State
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [examples, setExamples] = useState<TheoremExample[]>([]);
-  const [statement, setStatement] = useState('For any natural numbers a and b, (a + b)^2 = a^2 + 2*a*b + b^2');
-  const [domainHint, setDomainHint] = useState('algebra');
-  
+  const [statement, setStatement] = useState(initialSession.statement);
+
   // Editor & Verification State
-  const [leanCode, setLeanCode] = useState(
-    'theorem add_sq_expand (a b : Nat) : (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2 := by\n  sorry'
-  );
-  const [explanation, setExplanation] = useState<string>(
-    'Formalized as standard binomial expansion over natural numbers with Lean 4 exponentiation.'
-  );
-  const [formalizeSource, setFormalizeSource] = useState<'gemini' | 'mock' | null>(null);
-  const [formalizeSourceDetail, setFormalizeSourceDetail] = useState<string | undefined>();
-  const [diagnostics, setDiagnostics] = useState<LeanDiagnostic[]>([
-    { severity: 'warning', line: 2, column: 3, message: "declaration uses 'sorry'" }
-  ]);
-  const [goals, setGoals] = useState<string[]>([
-    '⊢ (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2'
-  ]);
-  const [isValid, setIsValid] = useState<boolean | null>(true);
-  const [isProven, setIsProven] = useState<boolean>(false);
+  const [leanCode, setLeanCode] = useState(initialSession.leanCode);
+  const [explanation, setExplanation] = useState<string>(initialSession.explanation);
+  const [formalizeSource, setFormalizeSource] = useState<'gemini' | 'mock' | null>(initialSession.formalizeSource);
+  const [formalizeSourceDetail, setFormalizeSourceDetail] = useState<string | undefined>(initialSession.formalizeSourceDetail);
+  const [diagnostics, setDiagnostics] = useState<LeanDiagnostic[]>(initialSession.diagnostics);
+  const [goals, setGoals] = useState<string[]>(initialSession.goals);
+  const [isValid, setIsValid] = useState<boolean | null>(initialSession.isValid);
+  const [isProven, setIsProven] = useState<boolean>(initialSession.isProven);
 
   // Prover execution state
-  const [steps, setSteps] = useState<ProofStep[]>([]);
-  const [winningTactic, setWinningTactic] = useState<string | undefined>();
-  const [totalDurationMs, setTotalDurationMs] = useState<number | undefined>();
+  const [steps, setSteps] = useState<ProofStep[]>(initialSession.steps);
+  const [winningTactic, setWinningTactic] = useState<string | undefined>(initialSession.winningTactic);
+  const [totalDurationMs, setTotalDurationMs] = useState<number | undefined>(initialSession.totalDurationMs);
 
   // Feedback & Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -69,6 +103,28 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Examples fetch error:', err));
   }, []);
 
+  // Persist editable session state so it survives a page reload / backgrounding
+  useEffect(() => {
+    const session: SessionState = {
+      statement,
+      leanCode,
+      explanation,
+      formalizeSource,
+      formalizeSourceDetail,
+      diagnostics,
+      goals,
+      isValid,
+      isProven,
+      steps,
+      winningTactic,
+      totalDurationMs,
+    };
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  }, [
+    statement, leanCode, explanation, formalizeSource, formalizeSourceDetail,
+    diagnostics, goals, isValid, isProven, steps, winningTactic, totalDurationMs,
+  ]);
+
   const handleSaveApiKey = (key: string) => {
     setCustomApiKey(key);
     localStorage.setItem('GEMINI_API_KEY', key);
@@ -82,9 +138,6 @@ export const App: React.FC = () => {
   // Handler: Select Example Preset
   const handleSelectExample = (ex: TheoremExample) => {
     setStatement(ex.english);
-    if (ex.category) {
-      setDomainHint(ex.category.toLowerCase().replace(' ', '_'));
-    }
   };
 
   // Handler: Autoformalize
@@ -96,7 +149,7 @@ export const App: React.FC = () => {
     setIsProven(false);
 
     try {
-      const res = await formalizeTheorem(statement, domainHint, customApiKey, selectedModel);
+      const res = await formalizeTheorem(statement, customApiKey, selectedModel);
       setLeanCode(res.lean_code);
       setExplanation(res.explanation);
       setIsValid(res.is_valid);
@@ -232,8 +285,6 @@ export const App: React.FC = () => {
         <InputSection
           statement={statement}
           setStatement={setStatement}
-          domainHint={domainHint}
-          setDomainHint={setDomainHint}
           examples={examples}
           onSelectExample={handleSelectExample}
           onFormalize={handleFormalize}

@@ -16,7 +16,6 @@ export async function getExamples(): Promise<TheoremExample[]> {
 
 export async function formalizeTheorem(
   englishStatement: string,
-  domainHint?: string,
   apiKey?: string,
   model?: string
 ): Promise<FormalizeResponse> {
@@ -25,7 +24,6 @@ export async function formalizeTheorem(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       english_statement: englishStatement,
-      domain_hint: domainHint,
       api_key: apiKey || undefined,
       model: model || undefined,
     }),

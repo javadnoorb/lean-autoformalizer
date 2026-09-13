@@ -5,8 +5,6 @@ import { TheoremExample } from '../types';
 interface InputSectionProps {
   statement: string;
   setStatement: (val: string) => void;
-  domainHint: string;
-  setDomainHint: (val: string) => void;
   examples: TheoremExample[];
   onSelectExample: (ex: TheoremExample) => void;
   onFormalize: () => void;
@@ -16,20 +14,11 @@ interface InputSectionProps {
 export const InputSection: React.FC<InputSectionProps> = ({
   statement,
   setStatement,
-  domainHint,
-  setDomainHint,
   examples,
   onSelectExample,
   onFormalize,
   isLoading,
 }) => {
-  const domains = [
-    { id: 'arithmetic', label: 'Arithmetic' },
-    { id: 'algebra', label: 'Algebra' },
-    { id: 'logic', label: 'Logic' },
-    { id: 'number_theory', label: 'Number Theory' },
-  ];
-
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
       {/* Top row: Label & Examples */}
@@ -77,26 +66,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
         </div>
       </div>
 
-      {/* Bottom controls: Domain selector & Formalize Action */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        {/* Domain Hint Pills */}
-        <div className="flex items-center flex-wrap gap-1.5 text-xs">
-          <span className="text-slate-500 mr-1">Domain:</span>
-          {domains.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => setDomainHint(domainHint === d.id ? '' : d.id)}
-              className={`px-2.5 py-1 rounded-md transition ${
-                domainHint === d.id
-                  ? 'bg-blue-600/20 border border-blue-500/50 text-blue-300 font-medium'
-                  : 'bg-slate-800/60 border border-slate-700/60 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-
+      {/* Bottom controls: Formalize Action */}
+      <div className="flex items-center justify-end pt-1">
         {/* Action Button */}
         <button
           onClick={onFormalize}
