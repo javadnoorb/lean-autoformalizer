@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 from typing import Dict, List, Tuple, Any
@@ -11,6 +12,22 @@ from app.models.schemas import LeanDiagnostic, VerifyResponse
 class LeanRunner:
     def __init__(self):
         self.timeout = settings.LEAN_TIMEOUT_SECS
+        # PIDs (== process group IDs, since each is its own session) of Lean
+        # subprocesses currently in flight. If this process is killed while
+        # one is running, the child would otherwise be orphaned -- Lean has
+        # no self-timeout, so an orphan just runs forever, burning CPU/RAM
+        # until someone notices and kills it by hand. kill_all_active() lets
+        # the app's shutdown hook clean these up first.
+        self._active_pgids: set = set()
+
+    def kill_all_active(self) -> None:
+        """Kill any in-flight Lean process groups. Call on app shutdown."""
+        for pgid in list(self._active_pgids):
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        self._active_pgids.clear()
 
     def _get_lean_exec_path(self) -> str:
         expanded = os.path.expanduser(settings.LEAN_BIN)
@@ -76,19 +93,35 @@ class LeanRunner:
             f.write(code)
             temp_path = f.name
 
+        proc = None
         try:
             cmd, cwd = self._build_lean_cmd(["--json", temp_path])
 
-            result = subprocess.run(
+            # start_new_session=True makes the child (and anything it spawns,
+            # e.g. lake's own worker processes) its own process group, so a
+            # timeout or shutdown can kill the whole tree via os.killpg
+            # instead of just the immediate child.
+            proc = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
-                cwd=cwd or None
+                cwd=cwd or None,
+                start_new_session=True,
             )
+            self._active_pgids.add(proc.pid)
 
-            stdout = result.stdout
-            stderr = result.stderr
+            try:
+                stdout, stderr = proc.communicate(timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
+                raise
+
+            returncode = proc.returncode
 
             diagnostics: List[LeanDiagnostic] = []
             goals: List[str] = []
@@ -127,9 +160,9 @@ class LeanRunner:
                     continue
 
             # Check stderr if no json diagnostics were produced but returncode != 0
-            if result.returncode != 0 and not diagnostics:
+            if returncode != 0 and not diagnostics:
                 has_error = True
-                err_msg = stderr.strip() or stdout.strip() or f"Lean exited with code {result.returncode}"
+                err_msg = stderr.strip() or stdout.strip() or f"Lean exited with code {returncode}"
                 diagnostics.append(LeanDiagnostic(
                     severity="error",
                     line=1,
@@ -150,6 +183,8 @@ class LeanRunner:
                 return self._mock_check(code)
             return (False, [LeanDiagnostic(severity="error", line=1, column=1, message=f"Execution error: {str(e)}")], [])
         finally:
+            if proc is not None:
+                self._active_pgids.discard(proc.pid)
             if os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)

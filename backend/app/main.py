@@ -1,4 +1,5 @@
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,10 +18,20 @@ from app.services.autoformalizer import autoformalizer
 from app.services.prover import prover
 from app.services.leandojo_harness import leandojo_harness
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # Without this, a Lean subprocess in flight when the app shuts down
+    # (redeploy, restart, crash) gets orphaned -- Lean has no self-timeout,
+    # so it would otherwise run forever, burning CPU/memory until someone
+    # notices and kills it by hand.
+    lean_runner.kill_all_active()
+
 app = FastAPI(
     title="Lean 4 Autoformalizer & Prover API",
     description="Backend service for translating English math theorems into Lean 4 and automated theorem proving.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend development
