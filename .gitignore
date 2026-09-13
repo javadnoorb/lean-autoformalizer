@@ -29,5 +29,8 @@ Thumbs.db
 # Vultr VM state
 deploy/.vultr-instance-id
 
+# Local deploy runtime state (pids/logs)
+deploy/.local-deploy/
+
 # Generated from Caddyfile.template using the VM's current public IP
 /Caddyfile
