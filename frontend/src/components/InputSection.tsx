@@ -81,7 +81,12 @@ export const InputSection: React.FC<InputSectionProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         {/* Domain Hint Pills */}
         <div className="flex items-center flex-wrap gap-1.5 text-xs">
-          <span className="text-slate-500 mr-1">Domain:</span>
+          <span
+            className="text-slate-500 mr-1"
+            title="Optional -- hints the AI formalizer toward domain-specific conventions (e.g. type choices, common lemma names). Has no effect in offline/mock mode."
+          >
+            Domain (optional):
+          </span>
           {domains.map((d) => (
             <button
               key={d.id}

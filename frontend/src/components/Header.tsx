@@ -50,12 +50,8 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
             )}
           </div>
 
-          {/* Gemini API Status */}
-          <button
-            onClick={onOpenSettings}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 border border-slate-800 transition cursor-pointer"
-            title="Configure Gemini API Key"
-          >
+          {/* Gemini API Status (informational -- use the Settings button to configure) */}
+          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-md bg-slate-900 border border-slate-800">
             <KeyRound className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-slate-400">LLM:</span>
             {isKeyConfigured ? (
@@ -65,12 +61,12 @@ export const Header: React.FC<HeaderProps> = ({ status, onOpenSettings, hasCusto
               </div>
             ) : (
               <div className="flex items-center space-x-1 text-amber-400">
-                <span>Key Missing (Click to Add)</span>
+                <span>Key Missing</span>
               </div>
             )}
-          </button>
+          </div>
 
-          {/* Settings Button */}
+          {/* Settings Button -- the one place to configure the API key/model */}
           <button
             onClick={onOpenSettings}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 transition border border-slate-700 hover:border-slate-600"
