@@ -8,10 +8,10 @@ class Settings(BaseSettings):
 
     # Total attempts (including the first) for a Gemini call that hits a
     # transient error (server overload, short-lived rate limit) before giving
-    # up. Each retry is a billed API call, so this is intentionally low by
-    # default -- raise it if you want more resilience and are fine paying for
-    # the extra attempts.
-    GEMINI_MAX_RETRIES: int = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
+    # up. Each retry is a billed API call, so this defaults to 1 (no retry --
+    # fail straight to the mock fallback) -- raise it if you want retries and
+    # are fine paying for the extra attempts.
+    GEMINI_MAX_RETRIES: int = int(os.getenv("GEMINI_MAX_RETRIES", "1"))
 
     # Lean 4 execution configuration
     LEAN_BIN: str = os.getenv("LEAN_BIN", "~/.elan/bin/lean")
