@@ -15,22 +15,24 @@ class AutoformalizerService:
         pass
 
     def _get_client(self, api_key: Optional[str] = None):
+        """Returns (client, error_reason). error_reason is set only when a key
+        was supplied but constructing the client still failed."""
         key = api_key or settings.GEMINI_API_KEY
         if not key:
-            return None
+            return None, "No Gemini API key configured"
         try:
             from google import genai
-            return genai.Client(api_key=key)
-        except Exception:
-            return None
+            return genai.Client(api_key=key), None
+        except Exception as e:
+            return None, f"Could not initialize Gemini client: {e}"
 
     def formalize(self, req: FormalizeRequest) -> FormalizeResponse:
-        client = self._get_client(req.api_key)
+        client, client_error = self._get_client(req.api_key)
         model_name = req.model or settings.GEMINI_MODEL
 
         if client is None:
             # Fallback mock formalizer for immediate UI demonstration
-            return self._mock_formalize(req)
+            return self._mock_formalize(req, reason=client_error)
 
         # Build contents with few-shot history
         contents = [
@@ -75,14 +77,15 @@ class AutoformalizerService:
                 explanation=explanation,
                 is_valid=is_valid,
                 diagnostics=diagnostics,
-                goals=goals
+                goals=goals,
+                source="gemini"
             )
 
         except Exception as e:
-            # If API call fails (e.g. invalid key or network issue), provide informative error
-            mock_res = self._mock_formalize(req)
-            mock_res.explanation = f"(API Note: {str(e)}) - {mock_res.explanation}"
-            return mock_res
+            # If API call fails (e.g. invalid key or network issue), fall back to
+            # the mock formalizer but say so explicitly rather than silently
+            # returning heuristic output that looks like it came from the LLM.
+            return self._mock_formalize(req, reason=f"Gemini API error: {e}")
 
     def _attempt_repair(self, client, model_name, contents, code, diagnostics):
         """Self-repair loop if Lean compiler finds syntax or type errors."""
@@ -141,7 +144,7 @@ Please fix the Lean 4 code so it compiles with standard Lean 4 types and ends wi
             "explanation": "Could not parse JSON response from LLM."
         }
 
-    def _mock_formalize(self, req: FormalizeRequest) -> FormalizeResponse:
+    def _mock_formalize(self, req: FormalizeRequest, reason: str = "No Gemini API key configured") -> FormalizeResponse:
         """Dynamic heuristic formalizer when Gemini API key is not configured."""
         raw_st = req.english_statement.strip()
         st_lower = raw_st.lower()
@@ -213,7 +216,9 @@ Please fix the Lean 4 code so it compiles with standard Lean 4 types and ends wi
             explanation=expl,
             is_valid=is_valid,
             diagnostics=diagnostics,
-            goals=goals
+            goals=goals,
+            source="mock",
+            source_detail=reason
         )
 
 autoformalizer = AutoformalizerService()
