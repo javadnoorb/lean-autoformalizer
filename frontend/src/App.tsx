@@ -34,7 +34,7 @@ interface SessionState {
 
 const defaultSession: SessionState = {
   statement: 'For any natural numbers a and b, (a + b)^2 = a^2 + 2*a*b + b^2',
-  domainHint: 'algebra',
+  domainHint: '',
   leanCode: 'theorem add_sq_expand (a b : Nat) : (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2 := by\n  sorry',
   explanation: 'Formalized as standard binomial expansion over natural numbers with Lean 4 exponentiation.',
   formalizeSource: null,

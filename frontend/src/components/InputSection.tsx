@@ -83,7 +83,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
         <div className="flex items-center flex-wrap gap-1.5 text-xs">
           <span
             className="text-slate-500 mr-1"
-            title="Optional -- hints the AI formalizer toward domain-specific conventions (e.g. type choices, common lemma names). Has no effect in offline/mock mode."
+            title="Optional -- hints the AI formalizer toward domain-specific conventions (e.g. type choices, common lemma names). Stays selected between statements, so clear it (click it again) if it no longer matches what you're formalizing -- a stale domain silently biases the prompt. No effect in offline/mock mode."
           >
             Domain (optional):
           </span>
