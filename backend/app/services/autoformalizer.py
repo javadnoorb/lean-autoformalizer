@@ -2,7 +2,7 @@ import json
 import re
 from typing import Optional
 from app.config import settings
-from app.models.schemas import FormalizeRequest, FormalizeResponse
+from app.models.schemas import FormalizeRequest, FormalizeResponse, ProveRequest
 from app.prompts.autoformalize import (
     AUTOFORMALIZE_SYSTEM_PROMPT,
     FEW_SHOT_EXAMPLES,
@@ -10,6 +10,7 @@ from app.prompts.autoformalize import (
 )
 from app.services.lean_runner import lean_runner
 from app.services.gemini_utils import generate_content_with_retry
+from app.services.prover import prover
 
 class AutoformalizerService:
     def __init__(self):
@@ -33,7 +34,7 @@ class AutoformalizerService:
 
         if client is None:
             # Fallback mock formalizer for immediate UI demonstration
-            return self._mock_formalize(req, reason=client_error)
+            return self._maybe_auto_prove(self._mock_formalize(req, reason=client_error), req.auto_prove)
 
         # Build contents with few-shot history
         contents = [
@@ -73,7 +74,7 @@ class AutoformalizerService:
                     client, model_name, contents, lean_code, diagnostics
                 )
 
-            return FormalizeResponse(
+            response = FormalizeResponse(
                 lean_code=lean_code,
                 theorem_name=theorem_name,
                 explanation=explanation,
@@ -82,12 +83,35 @@ class AutoformalizerService:
                 goals=goals,
                 source="gemini"
             )
+            return self._maybe_auto_prove(response, req.auto_prove)
 
         except Exception as e:
             # If API call fails (e.g. invalid key or network issue), fall back to
             # the mock formalizer but say so explicitly rather than silently
             # returning heuristic output that looks like it came from the LLM.
-            return self._mock_formalize(req, reason=f"Gemini API error: {e}")
+            return self._maybe_auto_prove(
+                self._mock_formalize(req, reason=f"Gemini API error: {e}"), req.auto_prove
+            )
+
+    def _maybe_auto_prove(self, response: FormalizeResponse, auto_prove: bool) -> FormalizeResponse:
+        """Optionally closes the goal with fast deterministic tactics right after
+        formalizing, so the caller doesn't need a separate /api/prove round trip.
+        Only runs the cheap fast_hammer strategy -- no extra LLM calls -- and only
+        if the formalized signature actually typechecked."""
+        if not auto_prove or not response.is_valid:
+            return response
+
+        prove_res = prover.prove(ProveRequest(
+            lean_code=response.lean_code,
+            theorem_name=response.theorem_name,
+            strategy="fast_hammer",
+        ))
+        if prove_res.success:
+            response.lean_code = prove_res.proof_code
+            response.diagnostics = prove_res.diagnostics
+            response.goals = prove_res.remaining_goals
+            response.proven = True
+        return response
 
     def _attempt_repair(self, client, model_name, contents, code, diagnostics):
         """Self-repair loop if Lean compiler finds syntax or type errors."""

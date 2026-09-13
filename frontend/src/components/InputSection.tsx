@@ -9,6 +9,8 @@ interface InputSectionProps {
   onSelectExample: (ex: TheoremExample) => void;
   onFormalize: () => void;
   isLoading: boolean;
+  autoProve: boolean;
+  setAutoProve: (val: boolean) => void;
 }
 
 export const InputSection: React.FC<InputSectionProps> = ({
@@ -18,6 +20,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
   onSelectExample,
   onFormalize,
   isLoading,
+  autoProve,
+  setAutoProve,
 }) => {
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
@@ -67,7 +71,21 @@ export const InputSection: React.FC<InputSectionProps> = ({
       </div>
 
       {/* Bottom controls: Formalize Action */}
-      <div className="flex items-center justify-end pt-1">
+      <div className="flex items-center justify-end gap-4 pt-1">
+        {/* Auto-Prove Toggle */}
+        <label
+          className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none"
+          title="After formalizing, immediately try to close the goal with fast deterministic tactics (omega/rfl/simp/aesop) instead of leaving `:= by sorry`. Off by default, and resets each session -- doesn't silently persist as a hidden behavior change."
+        >
+          <input
+            type="checkbox"
+            checked={autoProve}
+            onChange={(e) => setAutoProve(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+          />
+          <span>Auto-prove</span>
+        </label>
+
         {/* Action Button */}
         <button
           onClick={onFormalize}
