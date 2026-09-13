@@ -4,11 +4,39 @@ This deploys the frontend + backend in mock mode (`ALLOW_MOCK_FALLBACK=true`,
 no real Lean/Mathlib toolchain). Verification calls fall back to the mock
 validator; theorem formalization still uses the Gemini API.
 
-## 1. Create the VM
+## Quick path: one command
 
 Install [`vultr-cli`](https://github.com/vultr/vultr-cli) and point it at
 your API key (`~/.vultr-cli.yaml` with `api-key: ...`, or the `VULTR_API_KEY`
-env var). Then:
+env var), then:
+
+```bash
+deploy/deploy.sh
+```
+
+This creates the VM, hardens it, installs Docker, clones the repo, and
+brings the app up over HTTPS — no other manual steps. It also picks up your
+Gemini API key automatically if it can find one, checked in this order:
+
+1. `$GEMINI_API_KEY` env var
+2. `$GEMINI_API_KEY_FILE` env var (path to a file containing just the key)
+3. `~/.config/lean-autoformalizer/gemini-api-key` (default file location)
+
+If none of those are set, the app still comes up (mock mode still works),
+but formalization calls will fail until you SSH in and set
+`GEMINI_API_KEY` in `backend/.env` yourself — `deploy.sh` prints the exact
+commands to do that when it can't find a key.
+
+Tear down with `deploy/vultr-vm.sh destroy` (see step 6 below).
+
+## Manual path (step by step)
+
+Useful if you want more control, or to debug a step in isolation.
+`deploy/deploy.sh` is just these steps chained together over SSH.
+
+### 1. Create the VM
+
+With `vultr-cli` installed and configured (see Quick path above):
 
 ```bash
 deploy/vultr-vm.sh create
@@ -20,7 +48,7 @@ named `<hostname>-lean-autoformalizer` from `~/.ssh/id_ed25519.pub`. It
 prints the VM's IP and records the instance ID in `deploy/.vultr-instance-id`
 (not committed) so `destroy` can find it later.
 
-## 2. Harden the VM
+### 2. Harden the VM
 
 ```bash
 ssh root@<vm-ip> 'bash -s' < deploy/harden-vm.sh
@@ -31,7 +59,7 @@ sudo), disables root SSH login and password authentication, and enables
 `ufw` (allowing only SSH/80/443), `fail2ban`, and unattended security
 updates. From this point on, log in as `deploy@<vm-ip>`, not `root`.
 
-## 3. Run the setup script
+### 3. Run the setup script
 
 ```bash
 ssh deploy@<vm-ip>
@@ -58,7 +86,7 @@ resolvable HTTPS domain with zero manual DNS setup, and it self-adjusts if
 the VM gets a different IP after a destroy/recreate cycle. Caddy uses this
 to automatically obtain and renew a Let's Encrypt certificate.
 
-## 4. Verify it's up
+### 4. Verify it's up
 
 Visit `https://<the-sslip.io-domain-printed-by-setup-vm.sh>` in your
 browser — you should see the app over HTTPS, with plain HTTP redirecting to
@@ -77,7 +105,7 @@ docker compose ps
 docker compose logs -f
 ```
 
-## 5. Updating after a code change
+### 5. Updating after a code change
 
 ```bash
 cd ~/lean-autoformalizer
@@ -85,7 +113,7 @@ git pull
 docker compose up -d --build
 ```
 
-## 6. Tearing down to save cost
+### 6. Tearing down to save cost
 
 Since mock mode has no Mathlib cache to lose, there's nothing worth
 snapshotting:

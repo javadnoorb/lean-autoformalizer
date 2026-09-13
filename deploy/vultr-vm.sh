@@ -56,7 +56,7 @@ cmd_create() {
     --label="$LABEL" \
     --host="$LABEL" \
     --ssh-keys="$ssh_key_id" \
-    | awk 'NR==2 {print $1}')
+    | awk '$1 == "ID" {print $2}')
 
   echo "$instance_id" > "$STATE_FILE"
   echo "Instance created: $instance_id" >&2
@@ -64,7 +64,7 @@ cmd_create() {
   echo "Waiting for it to boot..." >&2
   local ip status
   for _ in $(seq 1 30); do
-    ip=$(vultr-cli instance get "$instance_id" | awk '/MAIN IP/ {print $3}')
+    ip=$(vultr-cli instance get "$instance_id" | awk '/^MAIN IP/ {print $3}')
     status=$(vultr-cli instance get "$instance_id" | awk '/^STATUS/ {print $2}')
     if [ "$status" = "active" ] && [ "$ip" != "0.0.0.0" ]; then
       echo "$ip" >> "$STATE_FILE"
