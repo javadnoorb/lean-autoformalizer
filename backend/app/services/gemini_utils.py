@@ -1,4 +1,5 @@
 import time
+from app.config import settings
 
 RETRYABLE_SERVER_CODES = {500, 502, 503, 504}
 
@@ -21,14 +22,21 @@ def _is_daily_quota_exhausted(e) -> bool:
     return False
 
 
-def generate_content_with_retry(client, max_retries: int = 3, backoff_secs: float = 1.5, **kwargs):
+def generate_content_with_retry(client, max_retries: int = None, backoff_secs: float = 1.5, **kwargs):
     """Calls client.models.generate_content, retrying on transient errors
     (server overload, short-lived per-minute rate limits) with exponential
     backoff. Does NOT retry a 429 caused by an exhausted daily quota, since
     that can't recover for hours. Raises the last error once retries are
     exhausted, or immediately for non-retryable errors (bad key, daily
-    quota, malformed request, etc.)."""
+    quota, malformed request, etc.).
+
+    max_retries defaults to settings.GEMINI_MAX_RETRIES (env-configurable)
+    since each retry is a billed API call -- pass it explicitly to override
+    for a specific call site."""
     from google.genai import errors
+
+    if max_retries is None:
+        max_retries = settings.GEMINI_MAX_RETRIES
 
     last_error = None
     for attempt in range(max_retries):
