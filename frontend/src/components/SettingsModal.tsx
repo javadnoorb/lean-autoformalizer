@@ -84,10 +84,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onChange={(e) => setModelInput(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none cursor-pointer"
           >
-            <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Accurate)</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro (Deep Mathematical Reasoning)</option>
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash (Fast & Accurate)</option>
+            <option value="gemini-pro-latest">gemini-pro-latest (Deep Mathematical Reasoning)</option>
+            <option value="gemini-flash-latest">gemini-flash-latest</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
           </select>
         </div>
 

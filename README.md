@@ -9,7 +9,7 @@ A web application that takes informal mathematical theorems stated in plain Engl
 - **English to Lean 4 Autoformalization**:
   - Translates natural English math statements into valid Lean 4 syntax.
   - Generates self-contained definitions and idiomatic theorem signatures ending with `:= by sorry`.
-  - Powered by Gemini 2.5 (`google-genai` SDK) with few-shot Mathlib-aligned prompts and automatic compiler error self-repair.
+  - Powered by Gemini (`google-genai` SDK) with few-shot Mathlib-aligned prompts and automatic compiler error self-repair.
 - **Lean 4 Verification & Goal Inspection**:
   - Runs the native Lean 4.33 toolchain on Linux.
   - Real-time compiler diagnostics (line & column error markers, warnings).
@@ -23,7 +23,7 @@ A web application that takes informal mathematical theorems stated in plain Engl
 - **Interactive UI**:
   - Monaco code editor with custom Lean 4 syntax highlighting and keyword tokenization.
   - Preset example theorems across Arithmetic, Algebra, Logic, and Number Theory.
-  - Settings modal to enter custom Gemini API keys or choose models (`gemini-2.5-flash`, `gemini-2.5-pro`).
+  - Settings modal to enter custom Gemini API keys or choose models (`gemini-3.6-flash`, `gemini-pro-latest`).
 
 ---
 
