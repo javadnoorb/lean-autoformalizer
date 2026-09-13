@@ -28,6 +28,8 @@ export const App: React.FC = () => {
   const [explanation, setExplanation] = useState<string>(
     'Formalized as standard binomial expansion over natural numbers with Lean 4 exponentiation.'
   );
+  const [formalizeSource, setFormalizeSource] = useState<'gemini' | 'mock' | null>(null);
+  const [formalizeSourceDetail, setFormalizeSourceDetail] = useState<string | undefined>();
   const [diagnostics, setDiagnostics] = useState<LeanDiagnostic[]>([
     { severity: 'warning', line: 2, column: 3, message: "declaration uses 'sorry'" }
   ]);
@@ -44,6 +46,7 @@ export const App: React.FC = () => {
 
   // Feedback & Toast
   const [toast, setToast] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<'success' | 'warning'>('success');
 
   // Loading States
   const [isFormalizing, setIsFormalizing] = useState(false);
@@ -99,8 +102,19 @@ export const App: React.FC = () => {
       setIsValid(res.is_valid);
       setDiagnostics(res.diagnostics);
       setGoals(res.goals);
-      setToast('✨ Lean 4 theorem formalized successfully!');
-      setTimeout(() => setToast(null), 4000);
+      setFormalizeSource(res.source);
+      setFormalizeSourceDetail(res.source_detail);
+      if (res.source === 'gemini') {
+        setToastVariant('success');
+        setToast('✨ Lean 4 theorem formalized successfully!');
+        setTimeout(() => setToast(null), 4000);
+      } else {
+        // Stays until the user dismisses it — easy to miss otherwise, and
+        // that's exactly what caused confusion when formalization silently
+        // fell back to the mock heuristic.
+        setToastVariant('warning');
+        setToast(`⚠️ Used mock formalizer (${res.source_detail || 'no API key'}) — result is heuristic, not LLM-generated.`);
+      }
     } catch (err: any) {
       alert(err.message || 'Autoformalization request failed.');
     } finally {
@@ -122,6 +136,7 @@ export const App: React.FC = () => {
       } else {
         setIsProven(false);
       }
+      setToastVariant('success');
       setToast('Verification complete.');
       setTimeout(() => setToast(null), 3000);
     } catch (err: any) {
@@ -147,6 +162,7 @@ export const App: React.FC = () => {
       setDiagnostics(res.diagnostics);
       setGoals(res.remaining_goals);
 
+      setToastVariant('success');
       if (res.success) {
         setIsProven(true);
         setIsValid(true);
@@ -175,8 +191,21 @@ export const App: React.FC = () => {
 
       {/* Floating Toast Notification */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 border border-blue-500/40 text-blue-200 px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2">
-          <span>{toast}</span>
+        <div
+          className={`fixed bottom-5 right-5 z-50 max-w-sm border px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium flex items-start space-x-2 animate-in fade-in slide-in-from-bottom-2 ${
+            toastVariant === 'warning'
+              ? 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+              : 'bg-slate-900 border-blue-500/40 text-blue-200'
+          }`}
+        >
+          <span className="leading-relaxed">{toast}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="shrink-0 opacity-70 hover:opacity-100 transition"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -222,6 +251,8 @@ export const App: React.FC = () => {
               isVerifying={isVerifying}
               isProving={isProving}
               explanation={explanation}
+              source={formalizeSource}
+              sourceDetail={formalizeSourceDetail}
             />
           </div>
 

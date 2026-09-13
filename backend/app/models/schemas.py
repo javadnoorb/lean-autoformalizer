@@ -21,6 +21,8 @@ class FormalizeResponse(BaseModel):
     is_valid: bool = Field(..., description="Whether the theorem signature typechecked successfully in Lean")
     diagnostics: List[LeanDiagnostic] = Field(default_factory=list)
     goals: List[str] = Field(default_factory=list, description="Extracted tactic goals at the sorry position")
+    source: str = Field(default="mock", description="'gemini' if the LLM actually produced this, 'mock' if a heuristic fallback was used")
+    source_detail: Optional[str] = Field(default=None, description="Why mock was used (missing key, API error, etc.), if applicable")
 
 class ProofStep(BaseModel):
     tactic: str

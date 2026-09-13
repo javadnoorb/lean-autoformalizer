@@ -12,6 +12,8 @@ export interface FormalizeResponse {
   is_valid: boolean;
   diagnostics: LeanDiagnostic[];
   goals: string[];
+  source: 'gemini' | 'mock';
+  source_detail?: string;
 }
 
 export interface ProofStep {
