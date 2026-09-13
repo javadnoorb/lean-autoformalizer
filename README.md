@@ -73,6 +73,13 @@ Open browser at: [http://localhost:3000](http://localhost:3000)
 
 ---
 
+## Deployment
+
+To host a mock-mode instance (no Lean/Mathlib toolchain required) on a
+cloud VM via Docker, see [`deploy/README.md`](deploy/README.md).
+
+---
+
 ## Running Tests
 
 To run the backend test suite:
