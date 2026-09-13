@@ -92,6 +92,11 @@ export const App: React.FC = () => {
   const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('GEMINI_MODEL') || 'gemini-3.6-flash');
 
+  // Not persisted -- resets to off each session so it can't silently keep
+  // affecting formalize calls without you noticing (same lesson as the
+  // domain hint: a sticky opt-in is a footgun).
+  const [autoProve, setAutoProve] = useState(false);
+
   // Load initial metadata on mount
   useEffect(() => {
     getSystemStatus()
@@ -149,7 +154,7 @@ export const App: React.FC = () => {
     setIsProven(false);
 
     try {
-      const res = await formalizeTheorem(statement, customApiKey, selectedModel);
+      const res = await formalizeTheorem(statement, customApiKey, selectedModel, autoProve);
       setLeanCode(res.lean_code);
       setExplanation(res.explanation);
       setIsValid(res.is_valid);
@@ -157,9 +162,14 @@ export const App: React.FC = () => {
       setGoals(res.goals);
       setFormalizeSource(res.source);
       setFormalizeSourceDetail(res.source_detail);
+      setIsProven(res.proven);
       if (res.source === 'gemini') {
         setToastVariant('success');
-        setToast('✨ Lean 4 theorem formalized successfully!');
+        setToast(
+          res.proven
+            ? '✨ Formalized and proven — no sorry left!'
+            : '✨ Lean 4 theorem formalized successfully!'
+        );
         setTimeout(() => setToast(null), 4000);
       } else {
         // Stays until the user dismisses it — easy to miss otherwise, and
@@ -289,6 +299,8 @@ export const App: React.FC = () => {
           onSelectExample={handleSelectExample}
           onFormalize={handleFormalize}
           isLoading={isFormalizing}
+          autoProve={autoProve}
+          setAutoProve={setAutoProve}
         />
 
         {/* Step 2: Main Interactive Grid (Editor + Infoview) */}

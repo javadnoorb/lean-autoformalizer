@@ -14,6 +14,7 @@ export interface FormalizeResponse {
   goals: string[];
   source: 'gemini' | 'mock';
   source_detail?: string;
+  proven: boolean;
 }
 
 export interface ProofStep {

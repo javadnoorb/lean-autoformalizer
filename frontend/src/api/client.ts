@@ -17,7 +17,8 @@ export async function getExamples(): Promise<TheoremExample[]> {
 export async function formalizeTheorem(
   englishStatement: string,
   apiKey?: string,
-  model?: string
+  model?: string,
+  autoProve?: boolean
 ): Promise<FormalizeResponse> {
   const res = await fetch(`${API_BASE}/formalize`, {
     method: 'POST',
@@ -26,6 +27,7 @@ export async function formalizeTheorem(
       english_statement: englishStatement,
       api_key: apiKey || undefined,
       model: model || undefined,
+      auto_prove: autoProve || undefined,
     }),
   });
   if (!res.ok) {

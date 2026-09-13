@@ -12,6 +12,15 @@ class FormalizeRequest(BaseModel):
     theorem_name: Optional[str] = Field(default=None, description="Optional custom identifier for theorem")
     api_key: Optional[str] = Field(default=None, description="Optional per-request Gemini API key")
     model: Optional[str] = Field(default=None, description="Gemini model name")
+    auto_prove: bool = Field(
+        default=False,
+        description=(
+            "If true, immediately attempt to close the goal with fast deterministic "
+            "tactics (omega/rfl/simp/aesop) after formalizing, returning already-proven "
+            "code instead of a `:= by sorry` stub when successful. Default false: "
+            "formalize always returns the sorry stub, proving is a separate step."
+        ),
+    )
 
 class FormalizeResponse(BaseModel):
     lean_code: str = Field(..., description="Generated Lean 4 code with signature and sorry proof")
@@ -22,6 +31,7 @@ class FormalizeResponse(BaseModel):
     goals: List[str] = Field(default_factory=list, description="Extracted tactic goals at the sorry position")
     source: str = Field(default="mock", description="'gemini' if the LLM actually produced this, 'mock' if a heuristic fallback was used")
     source_detail: Optional[str] = Field(default=None, description="Why mock was used (missing key, API error, etc.), if applicable")
+    proven: bool = Field(default=False, description="True if auto_prove was requested and successfully closed the goal (no sorry remaining)")
 
 class ProofStep(BaseModel):
     tactic: str
