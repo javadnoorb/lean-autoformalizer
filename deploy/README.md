@@ -1,4 +1,20 @@
-# Deploying the mock-mode app to Vultr
+# Deploying the app
+
+## Local (native, for trying it out)
+
+```bash
+deploy/local-deploy.sh start   # sets up venv/npm deps, launches both servers
+deploy/local-deploy.sh status  # check if it's up
+deploy/local-deploy.sh stop
+```
+
+Runs the backend with `uvicorn` and the frontend with the Vite dev server
+directly on the host (no Docker) — useful when you already have a real Lean
+toolchain set up locally and just want to click around the UI. Both bind to
+`0.0.0.0`, so if you're on Tailscale, `local-deploy.sh start` also prints a
+Tailscale URL for reaching it from another device (e.g. your phone).
+
+## Vultr (mock-mode, for hosting)
 
 This deploys the frontend + backend in mock mode (`ALLOW_MOCK_FALLBACK=true`,
 no real Lean/Mathlib toolchain). Verification calls fall back to the mock
