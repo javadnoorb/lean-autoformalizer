@@ -24,8 +24,7 @@ def test_examples():
 
 def test_formalize_mock():
     payload = {
-        "english_statement": "For all natural numbers n, n + 0 = n",
-        "domain_hint": "arithmetic"
+        "english_statement": "For all natural numbers n, n + 0 = n"
     }
     response = client.post("/api/formalize", json=payload)
     assert response.status_code == 200

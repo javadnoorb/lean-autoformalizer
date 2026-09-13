@@ -43,7 +43,7 @@ class AutoformalizerService:
             contents.append({"role": "user", "parts": [{"text": build_autoformalize_prompt(ex["english"])}]})
             contents.append({"role": "model", "parts": [{"text": json.dumps(ex["json"])}]})
 
-        prompt_text = build_autoformalize_prompt(req.english_statement, req.domain_hint)
+        prompt_text = build_autoformalize_prompt(req.english_statement)
         contents.append({"role": "user", "parts": [{"text": prompt_text}]})
 
         try:

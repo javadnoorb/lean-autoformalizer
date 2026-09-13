@@ -18,7 +18,6 @@ const SESSION_STORAGE_KEY = 'lean-autoformalizer-session';
 
 interface SessionState {
   statement: string;
-  domainHint: string;
   leanCode: string;
   explanation: string;
   formalizeSource: 'gemini' | 'mock' | null;
@@ -34,7 +33,6 @@ interface SessionState {
 
 const defaultSession: SessionState = {
   statement: 'For any natural numbers a and b, (a + b)^2 = a^2 + 2*a*b + b^2',
-  domainHint: '',
   leanCode: 'theorem add_sq_expand (a b : Nat) : (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2 := by\n  sorry',
   explanation: 'Formalized as standard binomial expansion over natural numbers with Lean 4 exponentiation.',
   formalizeSource: null,
@@ -64,7 +62,6 @@ export const App: React.FC = () => {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [examples, setExamples] = useState<TheoremExample[]>([]);
   const [statement, setStatement] = useState(initialSession.statement);
-  const [domainHint, setDomainHint] = useState(initialSession.domainHint);
 
   // Editor & Verification State
   const [leanCode, setLeanCode] = useState(initialSession.leanCode);
@@ -110,7 +107,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     const session: SessionState = {
       statement,
-      domainHint,
       leanCode,
       explanation,
       formalizeSource,
@@ -125,7 +121,7 @@ export const App: React.FC = () => {
     };
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   }, [
-    statement, domainHint, leanCode, explanation, formalizeSource, formalizeSourceDetail,
+    statement, leanCode, explanation, formalizeSource, formalizeSourceDetail,
     diagnostics, goals, isValid, isProven, steps, winningTactic, totalDurationMs,
   ]);
 
@@ -142,9 +138,6 @@ export const App: React.FC = () => {
   // Handler: Select Example Preset
   const handleSelectExample = (ex: TheoremExample) => {
     setStatement(ex.english);
-    if (ex.category) {
-      setDomainHint(ex.category.toLowerCase().replace(' ', '_'));
-    }
   };
 
   // Handler: Autoformalize
@@ -156,7 +149,7 @@ export const App: React.FC = () => {
     setIsProven(false);
 
     try {
-      const res = await formalizeTheorem(statement, domainHint, customApiKey, selectedModel);
+      const res = await formalizeTheorem(statement, customApiKey, selectedModel);
       setLeanCode(res.lean_code);
       setExplanation(res.explanation);
       setIsValid(res.is_valid);
@@ -292,8 +285,6 @@ export const App: React.FC = () => {
         <InputSection
           statement={statement}
           setStatement={setStatement}
-          domainHint={domainHint}
-          setDomainHint={setDomainHint}
           examples={examples}
           onSelectExample={handleSelectExample}
           onFormalize={handleFormalize}

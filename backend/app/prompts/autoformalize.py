@@ -55,12 +55,11 @@ FEW_SHOT_EXAMPLES = [
     }
 ]
 
-def build_autoformalize_prompt(statement: str, domain_hint: str = None) -> str:
-    domain_part = f"\nDomain / Context hint: {domain_hint}" if domain_hint else ""
+def build_autoformalize_prompt(statement: str) -> str:
     return f"""Please formalize the following mathematical statement into Lean 4:
 
 Statement:
-{statement}{domain_part}
+{statement}
 
 Remember to return only the JSON object with keys 'theorem_name', 'lean_code', and 'explanation'.
 """
