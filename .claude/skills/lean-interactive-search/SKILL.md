@@ -250,7 +250,9 @@ The app's existing prover never hit this wall because its LLM prompt
 to stdlib types unless Mathlib is specifically required -- i.e. it already
 avoids the failure mode above by keeping each process's working set small,
 which is worth keeping in mind as a mitigation for interactive search too
-(scope imports to what's actually needed instead of the whole umbrella). **Checked for a `repl`-style pickling escape hatch -- there isn't one.**
+(scope imports to what's actually needed instead of the whole umbrella).
+
+**Checked for a `repl`-style pickling escape hatch -- there isn't one.**
 Grepped the installed package (`server.py`, `utils.py`) and the
 `pantograph-repl` binary itself (`--help` / bad-arg output) for anything
 like `pickleTo`/`unpickleEnvFrom`. The only pickle-related code found is in
@@ -261,31 +263,78 @@ import-name and option args (no snapshot/cache flag). **Confirmed: current
 PyPantograph has no environment-caching mechanism.** Every `Server(imports=
 ['Mathlib'], ...)` call pays the full import cost from scratch.
 
+### Confirmed on cloud hardware: it really was the RAM
+
+Tested the "just use a bigger box" hypothesis directly rather than leaving
+it as a guess. `deploy/mathlib-bench.sh` (see `deploy/README.md`)
+provisions a throwaway Vultr `vhf-3c-8gb` instance (8GB RAM, high-frequency
+CPU, ~$0.066/hr), clones `mathlib4` at latest master, runs
+`lake exe cache get`, times bare `import Mathlib`, and auto-destroys.
+Result: **cache fetch 68s, `import Mathlib` itself 21.58s wall clock, peak
+RSS 6.1GB, only 40,946 major page faults** (vs. 599,255 locally) -- the
+same import, on a box with just 2GB more headroom above the working set,
+went from 1h08m to 22 seconds. **~190x.** Whole exercise (provision, setup,
+test, teardown) took under 2 minutes and cost a few cents. This confirms
+the diagnosis above wasn't a guess: it really is this dev machine's RAM
+ceiling, not anything wrong with Lean, Mathlib, or the tooling.
+
+Next, re-ran the same idea against **PyPantograph's `imports=['Mathlib']`
+path specifically** (not just bare `lean`) via `deploy/pantograph-bench.sh`
+-- same VM spec, a minimal Mathlib-`v4.33.1`-pinned project (matching the
+PyPantograph submodule fix from the section above), PyPantograph built
+from that same fixed source, then `Server(imports=['Mathlib'], ...)` +
+`goal_tactic` timed the same way it was tested locally. **Result: full
+success.** `Server(imports=['Mathlib'], project_path=...)` completed in
+**33.2s** (vs. 35+ minutes hung, never reaching "ready", on the local
+6GB-capped box). Once up, `goal_tactic` calls (`intro a b` then
+`exact Nat.add_comm a b` against `forall (a b : Nat), a + b = b + a`) took
+**17 milliseconds** and correctly reported `is_solved: True` -- confirming
+both that the resource ceiling was the whole problem and that, once past
+it, PyPantograph's actual interactive-tactic primitive is genuinely fast:
+pay ~30s once per long-lived server process, then sub-20ms per tactic
+call. (One iteration snag worth remembering: `goal_start` on a
+`forall`-quantified statement does *not* auto-introduce the bound
+variables -- `exact Nat.add_comm a b` fails with `Unknown identifier 'a'`
+until an explicit `intro a b` runs first. Not a resource issue, just
+Lean's normal `intro` semantics.)
+
+This settles the feasibility question that motivated this whole
+investigation: **deep interactive search with a real Mathlib environment
+is practical** -- it just isn't practical *on this specific 6GB-RAM dev
+machine*. On adequate hardware (an 8GB cloud box was already enough),
+PyPantograph's interactive primitive is both correct and fast.
+
 ## Recommended next step
 
-Do **not** re-run PyPantograph's `imports=['Mathlib']` path (or LeanDojo's
-trace step) on this same resource-constrained dev machine (6GB RAM cap)
-expecting a different result -- it's a hardware ceiling, not a bug, and
-will burn another 30+ minutes and orphan another multi-GB process every
-time. Given the root cause is machine memory, not the tools, there are two
-independent axes to pursue, and they're not mutually exclusive:
+**Local dev machine (6GB RAM cap): don't re-run PyPantograph's
+`imports=['Mathlib']` path or LeanDojo's trace step here expecting a
+different result** -- confirmed hardware ceiling, not a bug, and it will
+burn 30+ minutes and orphan a multi-GB process every time.
 
-1. **Avoid needing the full Mathlib environment resident at once**, the
-   same way this app's existing prover already does: scope imports to
-   specific `Mathlib.X.Y` modules instead of the whole-umbrella
-   `import Mathlib`, whichever interactive tool ends up used. Untested
-   here so far, but plausible given the app's own working precedent.
-   `leanprover-community/repl`'s pickling (bake a Mathlib-imported
-   environment to disk once, `unpickleEnvFrom` it cheaply thereafter) is
-   the other way to amortize this cost -- still the most promising
-   concrete option if full-Mathlib access is actually required, and it's
-   the same mechanism DeepSeek-Prover itself relies on.
-2. **Re-test PyPantograph (and possibly LeanDojo) on a machine with more
-   RAM** (8-16GB+ commonly recommended for Mathlib work) before ruling
-   either out for real -- the negative results recorded above are only
-   verified to be true *on this specific 6GB-capped box*.
+**For real use, provision properly, don't route around the RAM.** Given
+the cloud test above turned a 1-hour hang into a 22-second import for a
+few cents, the highest-leverage next step for interactive search is simply
+**not developing it against this 6GB-capped machine at all** -- use
+`deploy/mathlib-bench.sh` / `deploy/pantograph-bench.sh` as the template
+for a real dev/serving box (8GB+ was already enough; no need to over-buy
+32GB). This sidesteps the whole problem rather than working around it.
 
-Before committing to hand-rolling a `repl` wrapper (more work than
-adopting a library), it's still worth a quick, time-boxed check of
-LeanCopilot's LLM-calling mechanism (not yet looked at) in case it
-sidesteps this problem in a different way.
+If a persistent, low-latency interactive-search backend is still wanted
+beyond ad hoc testing, two options remain worth comparing on real
+hardware now that "does it even work" is settled:
+
+1. **PyPantograph as-is**, accepting a ~20-30s one-time Mathlib import per
+   long-lived server process (not per tactic call) -- likely fine if the
+   process stays up and serves many proof attempts, given the app's own
+   architecture (FastAPI singleton services) already keeps processes
+   alive across requests.
+2. **`leanprover-community/repl` with its native environment pickling**
+   (bake a Mathlib-imported environment to disk once, `unpickleEnvFrom` it
+   in milliseconds thereafter) -- more implementation work than adopting a
+   library, but avoids paying even the one-time cost repeatedly across
+   process restarts, and it's the same mechanism DeepSeek-Prover itself
+   relies on.
+
+Before committing to hand-rolling a `repl` wrapper, it's still worth a
+quick, time-boxed check of LeanCopilot's LLM-calling mechanism (not yet
+looked at) in case it sidesteps this problem in a different way.
