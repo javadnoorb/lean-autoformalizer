@@ -1,6 +1,6 @@
 ---
 name: lean-interactive-search
-description: Findings from investigating deep interactive Lean tactic search (incremental tactic-state interaction, tree search, eventual DeepSeek-Prover integration) for this app. Read this BEFORE attempting LeanDojo, building a persistent-Lean-process wrapper, or evaluating LeanCopilot/PyPantograph -- it records what was already tried, what failed and why, and what's still unverified, so that work isn't repeated from scratch.
+description: Findings from investigating deep interactive Lean tactic search (incremental tactic-state interaction, tree search, eventual DeepSeek-Prover integration) for this app. Read this BEFORE attempting LeanDojo, PyPantograph's Mathlib path, building a persistent-Lean-process/repl wrapper, or evaluating LeanCopilot -- it records what was already tried, what failed and why (both LeanDojo and PyPantograph hit the same Mathlib-import resource tax), and what's still unverified, so that work isn't repeated from scratch.
 ---
 
 # Deep interactive Lean search: investigation findings
@@ -139,9 +139,7 @@ the paper): `lean_dojo` appears nowhere in `requirements.txt` or anywhere in
   feed it into our own search loop" -- not "install DeepSeek's finished
   product."
 
-**Found two more actively-maintained, purpose-built candidates, neither yet
-tested against this project -- evaluate these before hand-rolling a `repl`
-wrapper:**
+**Found two more actively-maintained, purpose-built candidates:**
 
 - **[LeanCopilot](https://github.com/lean-dojo/LeanCopilot)** (from the same
   org as LeanDojo, but far more actively maintained -- commits weeks old at
@@ -152,26 +150,101 @@ wrapper:**
   Python-orchestrates-everything architecture -- the model-calling
   mechanism lives inside Lean, not in `autoformalizer.py`/`prover.py`.
   Not yet checked how it calls out to an LLM (bundled local model vs.
-  configurable external API) -- check this first if evaluating it.
-- **[PyPantograph](https://github.com/stanford-centaur/PyPantograph)**
-  (`stanford-centaur` org; paper: arXiv:2410.16429). Python-side
-  machine-to-machine interaction library -- `pip`/`uv`-installable,
-  provides `goal_tactic` (incremental tactic application, the actual
-  primitive needed here) and `check_track` (whole-file check, same shape as
-  today's `lean_runner.py`). Ships MCTS search-state handling natively
-  (recent commit: "Fix MCTS search state advancement"). No evidence in its
-  README of a mandatory LeanDojo-style full-repo tracing step, but **this
-  has not been empirically verified against this project** the way LeanDojo
-  was -- don't assume it's friction-free until it's actually been run here.
-  Given this app's architecture (Python/FastAPI orchestrating an LLM), this
-  is the more natural fit of the two to evaluate first.
+  configurable external API), and not yet empirically tested here.
+- **[PyPantograph](https://github.com/stanford-centaur/PyPantograph)** --
+  tested against this project (see below). **Verdict: excellent for
+  Mathlib-free interaction, but hits the same resource tax as LeanDojo the
+  moment Mathlib enters the picture. Do not re-attempt the Mathlib path
+  without a real fix (see below) -- it will burn 30+ minutes of pegged CPU
+  and multi-GB RAM per attempt and still not finish.**
+
+### PyPantograph: tested, mixed result
+
+`pip install`-able (package name `pantograph` on PyPI, `0.3.15`). Bundles a
+self-contained `pantograph-repl` binary (~247MB) plus a `lean-toolchain`
+file baked in at build time from a git submodule
+(`src/` -> `leanprover/Pantograph`, the official Lean org's fork, not a
+research side-project).
+
+**Gotcha found and fixed**: PyPantograph's `main` branch on PyPI/GitHub had
+its `src/` submodule pinned to a `leanprover/Pantograph` commit from
+`v4.29.1` (stale -- last bumped on PyPantograph's side well before Lean's
+own repo advanced). Symptom: `Server(imports=['Mathlib'], project_path=...)`
+against this project (`v4.33.1`) fails immediately with `uncaught exception:
+failed to read file '.../Mathlib.olean', incompatible header`. Checked
+PyPantograph's own PR #176 (`build/version` branch) -- an official,
+unmerged, but insufficient bump to only `v4.30.0`. **Fix**: clone fresh with
+`--recurse-submodules`, then manually re-point the submodule to match your
+project's exact toolchain and rebuild:
+```bash
+git clone --recurse-submodules https://github.com/stanford-centaur/PyPantograph.git /tmp/PyPantograph
+cd /tmp/PyPantograph/src && git fetch origin dev && git checkout <commit-matching-your-lean-toolchain>
+cd /home/javad/projects/lean-autoformalizer/backend && source .venv/bin/activate
+pip uninstall -y pantograph && pip install /tmp/PyPantograph
+```
+Verify with `cat .venv/lib/python3.12/site-packages/pantograph/lean-toolchain`
+-- must exactly match your project's `lean-toolchain`. (We used commit
+`92d4818a4b343d7be293731e03359a19e8082626`, "Merge pull request 'build:
+Update Lean to v4.33.1, version to 0.3.19' (#347)", to match this project's
+`v4.33.1`.)
+
+**With versions matched, `Init`-only interaction works great** --
+`Server(imports=['Init'])`, `goal_start(statement)`,
+`goal_tactic(state, tactic=..., site=Site(goal_id=...))` all behave exactly
+as documented. Verified multi-step + branching + per-goal targeting +
+completion detection end-to-end:
+`forall (p q: Prop), Or p q -> Or q p` via `intro` -> `cases h` (produces
+`case inl`/`case inr`) -> `Site(goal_id=0)` targeting -> `right; assumption`
+/ `left; assumption` -> `state.is_solved == True`. This is genuinely the
+incremental tactic-state primitive this app needs, and it's fast (seconds,
+not minutes).
+
+**But `imports=['Mathlib']` reproduces LeanDojo's resource tax, just via a
+different mechanism.** Tested against `add_sq_demo` (Mathlib already fully
+built in `.lake/build`, versions exactly matched, no `.olean` header
+error this time): `Server(imports=['Mathlib'], project_path='.../add_sq_demo',
+timeout=1800)` ran for **35+ minutes, pegged at ~84% CPU, ~1.2GB RSS, and
+never emitted the "ready" signal** -- the constructor raised
+`RuntimeError: Server failed to emit ready signal in time` after the
+30-minute timeout, but the underlying `pantograph-repl` subprocess kept
+running (CPU still pegged, RSS still fluctuating around 1.2GB) as an
+**orphan** after the Python process exited, because the exception path in
+`Server.__init__`/`restart_async` never calls `self._close()` on failure.
+Confirmed via `/proc/<pid>/environ` that `LEAN_PATH` correctly pointed at
+the prebuilt `.lake/build/lib/lean` dirs (including
+`.../mathlib/.lake/build/lib/lean`) -- this is not a misconfiguration, the
+process had access to the prebuilt `.olean` files and was still that slow.
+**Same operational hazard as LeanDojo**: kill orphaned `pantograph-repl` by
+matching the process name (`pkill -9 -f pantograph-repl`), not just the
+parent PID -- `Server._close()`/`proc.terminate()` is never reached when
+`restart_async` raises.
+
+This means PyPantograph's `imports=['Mathlib']` startup is *not* free of
+the tracing-style tax the LeanDojo section above describes -- it just pays
+it as a one-time-per-process-startup import/elaboration cost instead of a
+static whole-repo trace. **Checked for a `repl`-style pickling escape hatch -- there isn't one.**
+Grepped the installed package (`server.py`, `utils.py`) and the
+`pantograph-repl` binary itself (`--help` / bad-arg output) for anything
+like `pickleTo`/`unpickleEnvFrom`. The only pickle-related code found is in
+`test_server.py` (`goal-state.pickle`), which is plain Python `pickle` of a
+`GoalState` object for test fixture reuse -- unrelated to caching a
+Lean/Mathlib environment. The `pantograph-repl` binary takes only
+import-name and option args (no snapshot/cache flag). **Confirmed: current
+PyPantograph has no environment-caching mechanism.** Every `Server(imports=
+['Mathlib'], ...)` call pays the full import cost from scratch.
 
 ## Recommended next step
 
-Do **not** re-attempt LeanDojo. Before hand-building a `repl`-JSON-protocol
-wrapper from scratch, spend a small, time-boxed session actually installing
-and testing **PyPantograph** against this project (or the Mathlib-free
-`dojo_toy` project first, for a cheap initial check) -- confirm whether it
-avoids LeanDojo's tracing tax, and whether `goal_tactic` gives the
-incremental interaction this app needs. Only fall back to raw `repl` +
-hand-rolled JSON plumbing if PyPantograph turns out not to fit.
+Do **not** re-attempt LeanDojo. Do **not** re-run PyPantograph's
+`imports=['Mathlib']` path expecting a different result -- it will burn
+another 30+ minutes and orphan another multi-GB process, and there is no
+caching flag to fix it with. The remaining real option is to hand-roll a
+thin wrapper around `leanprover-community/repl` directly (JSON-over-stdin),
+using *its* native `pickleTo`/`unpickleEnvFrom` environment pickling to pay
+the Mathlib-import cost once and reuse it across sessions -- the same
+pattern DeepSeek-Prover itself uses (see above). This is more work than
+adopting a library, but it's the only path found so far that both gives
+incremental tactic-state interaction *and* avoids paying a Mathlib-import
+tax on every session. Before starting that build, it would still be worth
+a quick, time-boxed check of LeanCopilot's LLM-calling mechanism (not yet
+looked at) in case it sidesteps this problem in a different way.
