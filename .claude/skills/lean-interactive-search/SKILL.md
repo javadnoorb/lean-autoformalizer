@@ -358,3 +358,11 @@ supplies each tactic) and no frontend changes -- deliberately deferred to
 a later phase. End-to-end verification (this can't run on the local dev
 machine) is `deploy/pantograph-service-bench.sh`, which deploys the real
 app to a throwaway cloud VM and `curl`s the actual endpoints.
+
+**Verified end-to-end against the real deployed app (PR #20): full
+success.** `POST /api/interactive/sessions` (real Mathlib import): 33s.
+`POST .../tactic` with `intro a b`: 12ms. `POST .../tactic` with
+`exact Nat.add_comm a b`: <1ms, `is_solved: true`. Close, re-check
+`active_sessions: 0`, 404 on an unknown session id, 429 past
+`INTERACTIVE_MAX_SESSIONS` -- all correct. This is the actual FastAPI app
+(not a standalone script) doing real interactive tactic search over HTTP.
