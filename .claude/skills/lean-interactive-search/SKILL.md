@@ -222,7 +222,35 @@ parent PID -- `Server._close()`/`proc.terminate()` is never reached when
 This means PyPantograph's `imports=['Mathlib']` startup is *not* free of
 the tracing-style tax the LeanDojo section above describes -- it just pays
 it as a one-time-per-process-startup import/elaboration cost instead of a
-static whole-repo trace. **Checked for a `repl`-style pickling escape hatch -- there isn't one.**
+static whole-repo trace.
+
+**Root-caused: this is machine resources, not a PyPantograph/LeanDojo
+defect.** Isolated it by dropping both tools entirely and timing bare
+`lake env lean` on a file containing only `import Mathlib` in this same
+project: **1h08m wall clock**, with `/usr/bin/time -v` showing 292s user
+time vs **3421s system time** and **599,255 major page faults** -- a
+thrashing signature, not a compute-bound one. Root cause: this dev
+machine's Mathlib build (`.lake/packages/mathlib/.lake/build/lib/lean`) is
+**6.0GB** of compiled `.olean` data, and this machine's WSL2 VM is capped
+at **6GB RAM** (`.wslconfig`: `memory=6GB`) because the physical host only
+has **7.8GB total RAM** -- there's essentially no headroom to raise the
+cap without starving Windows itself. Holding the *entire* Mathlib
+environment resident in one process needs more memory than this box can
+give it, so it constantly evicts and re-reads pages from disk. This isn't
+fixable in software and isn't specific to PyPantograph -- LeanDojo's own
+multi-hour tax (documented above) is almost certainly the same underlying
+cause, just manifesting as static tracing instead of a live import. On a
+machine with more RAM (the 8-16GB+ commonly recommended for Mathlib work),
+both LeanDojo's trace step and PyPantograph's `imports=['Mathlib']` could
+plausibly be fine -- **don't conclude either tool is broken from tests run
+on this machine; re-test on better hardware before ruling either out.**
+
+The app's existing prover never hit this wall because its LLM prompt
+(`prompts/autoformalize.py`) explicitly avoids `import Mathlib` and sticks
+to stdlib types unless Mathlib is specifically required -- i.e. it already
+avoids the failure mode above by keeping each process's working set small,
+which is worth keeping in mind as a mitigation for interactive search too
+(scope imports to what's actually needed instead of the whole umbrella). **Checked for a `repl`-style pickling escape hatch -- there isn't one.**
 Grepped the installed package (`server.py`, `utils.py`) and the
 `pantograph-repl` binary itself (`--help` / bad-arg output) for anything
 like `pickleTo`/`unpickleEnvFrom`. The only pickle-related code found is in
@@ -235,16 +263,29 @@ PyPantograph has no environment-caching mechanism.** Every `Server(imports=
 
 ## Recommended next step
 
-Do **not** re-attempt LeanDojo. Do **not** re-run PyPantograph's
-`imports=['Mathlib']` path expecting a different result -- it will burn
-another 30+ minutes and orphan another multi-GB process, and there is no
-caching flag to fix it with. The remaining real option is to hand-roll a
-thin wrapper around `leanprover-community/repl` directly (JSON-over-stdin),
-using *its* native `pickleTo`/`unpickleEnvFrom` environment pickling to pay
-the Mathlib-import cost once and reuse it across sessions -- the same
-pattern DeepSeek-Prover itself uses (see above). This is more work than
-adopting a library, but it's the only path found so far that both gives
-incremental tactic-state interaction *and* avoids paying a Mathlib-import
-tax on every session. Before starting that build, it would still be worth
-a quick, time-boxed check of LeanCopilot's LLM-calling mechanism (not yet
-looked at) in case it sidesteps this problem in a different way.
+Do **not** re-run PyPantograph's `imports=['Mathlib']` path (or LeanDojo's
+trace step) on this same resource-constrained dev machine (6GB RAM cap)
+expecting a different result -- it's a hardware ceiling, not a bug, and
+will burn another 30+ minutes and orphan another multi-GB process every
+time. Given the root cause is machine memory, not the tools, there are two
+independent axes to pursue, and they're not mutually exclusive:
+
+1. **Avoid needing the full Mathlib environment resident at once**, the
+   same way this app's existing prover already does: scope imports to
+   specific `Mathlib.X.Y` modules instead of the whole-umbrella
+   `import Mathlib`, whichever interactive tool ends up used. Untested
+   here so far, but plausible given the app's own working precedent.
+   `leanprover-community/repl`'s pickling (bake a Mathlib-imported
+   environment to disk once, `unpickleEnvFrom` it cheaply thereafter) is
+   the other way to amortize this cost -- still the most promising
+   concrete option if full-Mathlib access is actually required, and it's
+   the same mechanism DeepSeek-Prover itself relies on.
+2. **Re-test PyPantograph (and possibly LeanDojo) on a machine with more
+   RAM** (8-16GB+ commonly recommended for Mathlib work) before ruling
+   either out for real -- the negative results recorded above are only
+   verified to be true *on this specific 6GB-capped box*.
+
+Before committing to hand-rolling a `repl` wrapper (more work than
+adopting a library), it's still worth a quick, time-boxed check of
+LeanCopilot's LLM-calling mechanism (not yet looked at) in case it
+sidesteps this problem in a different way.
