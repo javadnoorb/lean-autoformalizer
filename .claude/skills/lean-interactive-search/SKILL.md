@@ -338,3 +338,23 @@ hardware now that "does it even work" is settled:
 Before committing to hand-rolling a `repl` wrapper, it's still worth a
 quick, time-boxed check of LeanCopilot's LLM-calling mechanism (not yet
 looked at) in case it sidesteps this problem in a different way.
+
+## Status: option 1 (PyPantograph as-is) foundation built
+
+`backend/app/services/pantograph_sessions.py` implements a session-based
+API around PyPantograph (`/api/interactive/status|sessions|.../tactic`) --
+start a session, apply tactics one at a time, close it, with a hard cap on
+concurrent sessions and idle-eviction (each session is a multi-GB resident
+process). One correctness constraint worth remembering if extending this:
+PyPantograph's sync methods share **one process-wide asyncio event loop**
+across every `Server` instance (verified against the installed source,
+`pantograph/utils.py`'s `to_sync`), so every call into it -- across every
+session -- is serialized through a single lock in
+`PantographSessionManager`. This is required correctness, not an
+optimization to relax later.
+
+No automated tactic-search/model-driven loop yet (a human/test client
+supplies each tactic) and no frontend changes -- deliberately deferred to
+a later phase. End-to-end verification (this can't run on the local dev
+machine) is `deploy/pantograph-service-bench.sh`, which deploys the real
+app to a throwaway cloud VM and `curl`s the actual endpoints.
