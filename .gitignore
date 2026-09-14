@@ -28,6 +28,10 @@ Thumbs.db
 
 # Vultr VM state
 deploy/.vultr-instance-id
+deploy/.vultr-bench-instance-id
+deploy/.vultr-pantograph-bench-instance-id
+deploy/mathlib-bench-results/
+deploy/pantograph-bench-results/
 
 # Local deploy runtime state (pids/logs)
 deploy/.local-deploy/
