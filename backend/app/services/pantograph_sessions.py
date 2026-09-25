@@ -243,40 +243,180 @@ class PantographSessionManager:
 
             site = self._Site(goal_id=goal_id) if goal_id is not None else self._Site()
             t0 = time.time()
-            try:
-                new_state = session.server.goal_tactic(session.state, tactic=tactic, site=site)
+            status, payload = self._apply_tactic_step(session, session.state, tactic, site)
+            session.last_used_at = time.time()
+            duration_ms = int((time.time() - t0) * 1000)
+
+            if status == "success":
+                new_state = payload
                 session.state = new_state
-                session.last_used_at = time.time()
                 return {
                     "status": "success",
                     "message": None,
                     "remaining_goals": [str(g) for g in new_state.goals],
                     "is_solved": new_state.is_solved,
-                    "duration_ms": int((time.time() - t0) * 1000),
+                    "duration_ms": duration_ms,
                 }
-            except self._TacticFailure as e:
-                session.last_used_at = time.time()
-                return {
-                    "status": "failed",
-                    "message": str(e),
-                    "remaining_goals": [str(g) for g in session.state.goals],
-                    "is_solved": False,
-                    "duration_ms": int((time.time() - t0) * 1000),
-                }
-            except self._ServerError as e:
-                if getattr(session.server, "proc", None) is None:
-                    self._sessions.pop(session_id, None)
-                    raise InteractiveSessionCrashedError(str(e)) from e
-                session.last_used_at = time.time()
-                return {
-                    "status": "failed",
-                    "message": str(e),
-                    "remaining_goals": [str(g) for g in session.state.goals],
-                    "is_solved": False,
-                    "duration_ms": int((time.time() - t0) * 1000),
-                }
+            return {
+                "status": "failed",
+                "message": payload,
+                "remaining_goals": [str(g) for g in session.state.goals],
+                "is_solved": False,
+                "duration_ms": duration_ms,
+            }
         finally:
             self._lock.release()
+
+    def run_search(
+        self,
+        session_id: str,
+        max_depth: Optional[int] = None,
+        max_attempts: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Bounded depth-first proof search with backtracking, automating
+        what apply_tactic previously required a human/test client to drive
+        one call at a time (see .claude/skills/lean-interactive-search/SKILL.md).
+        At each goal state, tries INTERACTIVE_SEARCH_TACTICS in order; a
+        tactic that succeeds without solving recurses one level deeper,
+        bounded by max_depth. Backtracking is free -- PyPantograph GoalStates
+        are immutable snapshots, so trying the next tactic against the same
+        parent state after a dead end is a normal goal_tactic call, not an
+        undo.
+
+        Held as a single critical section for the whole search, unlike
+        apply_tactic's one-call-per-lock-acquisition. Releasing the lock
+        between attempts would let a concurrent apply_tactic() on this same
+        session commit a state this search's backtracking doesn't know
+        about -- exactly the kind of race the module docstring's locking
+        constraint exists to rule out. With the default bounds (depth 6, 40
+        attempts) and typical sub-second tactic latency this finishes well
+        inside INTERACTIVE_LOCK_WAIT_SECS; other interactive requests queue
+        behind it like they would behind any other in-flight call.
+
+        Exploring a losing branch never touches session.state -- only a
+        solving path is committed, mirroring apply_tactic's failure
+        semantics.
+        """
+        self._acquire_lock()
+        try:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise InteractiveSessionNotFoundError(session_id)
+
+            depth_budget = (
+                max_depth if max_depth is not None else settings.INTERACTIVE_SEARCH_MAX_DEPTH
+            )
+            attempt_budget = (
+                max_attempts if max_attempts is not None else settings.INTERACTIVE_SEARCH_MAX_ATTEMPTS
+            )
+            tactics = [t.strip() for t in settings.INTERACTIVE_SEARCH_TACTICS.split(",") if t.strip()]
+
+            t0 = time.time()
+            trace: List[Dict[str, Any]] = []
+            attempts = [0]
+            found = self._dfs(session, session.state, tactics, depth_budget, attempt_budget, attempts, trace, [])
+            duration_ms = int((time.time() - t0) * 1000)
+            session.last_used_at = time.time()
+
+            if found is not None:
+                path, final_state = found
+                session.state = final_state
+                return {
+                    "session_id": session_id,
+                    "success": True,
+                    "is_solved": final_state.is_solved,
+                    "tactics": path,
+                    "remaining_goals": [str(g) for g in final_state.goals],
+                    "attempts": attempts[0],
+                    "duration_ms": duration_ms,
+                    "trace": trace,
+                }
+
+            return {
+                "session_id": session_id,
+                "success": False,
+                "is_solved": False,
+                "tactics": [],
+                "remaining_goals": [str(g) for g in session.state.goals],
+                "attempts": attempts[0],
+                "duration_ms": duration_ms,
+                "trace": trace,
+            }
+        finally:
+            self._lock.release()
+
+    def _dfs(
+        self,
+        session: "_Session",
+        state: Any,
+        tactics: List[str],
+        depth_left: int,
+        attempt_budget: int,
+        attempts: List[int],
+        trace: List[Dict[str, Any]],
+        path: List[str],
+    ):
+        """Assumes self._lock is already held by run_search. Returns
+        (winning_tactic_path, solved_state) or None if no path was found
+        within the remaining depth/attempt budget."""
+        if state.is_solved:
+            return path, state
+
+        if depth_left <= 0:
+            return None
+
+        for tactic in tactics:
+            if attempts[0] >= attempt_budget:
+                return None
+            attempts[0] += 1
+
+            site = self._Site(goal_id=0) if len(state.goals) > 1 else self._Site()
+            status, payload = self._apply_tactic_step(session, state, tactic, site)
+            if status == "success":
+                new_state = payload
+                trace.append({
+                    "depth": len(path),
+                    "tactic": tactic,
+                    "status": "success",
+                    "message": None,
+                    "remaining_goals": [str(g) for g in new_state.goals],
+                })
+                result = self._dfs(
+                    session, new_state, tactics, depth_left - 1, attempt_budget, attempts, trace, path + [tactic]
+                )
+                if result is not None:
+                    return result
+                # Dead end past this point -- backtrack and try the next
+                # tactic against the same `state` above.
+            else:
+                trace.append({
+                    "depth": len(path),
+                    "tactic": tactic,
+                    "status": "failed",
+                    "message": payload,
+                    "remaining_goals": [str(g) for g in state.goals],
+                })
+
+        return None
+
+    def _apply_tactic_step(self, session: "_Session", state: Any, tactic: str, site: Any):
+        """A single goal_tactic call, assuming self._lock is already held.
+        Returns ("success", new_state) or ("failed", message); raises
+        InteractiveSessionCrashedError (and evicts the session) exactly
+        like apply_tactic does on a dead-process ServerError. Shared by
+        apply_tactic and the search's _dfs -- site selection stays with each
+        caller since they pick goals differently (apply_tactic: whatever the
+        API caller asked for; search: always the first remaining goal)."""
+        try:
+            new_state = session.server.goal_tactic(state, tactic=tactic, site=site)
+            return "success", new_state
+        except self._TacticFailure as e:
+            return "failed", str(e)
+        except self._ServerError as e:
+            if getattr(session.server, "proc", None) is None:
+                self._sessions.pop(session.id, None)
+                raise InteractiveSessionCrashedError(str(e)) from e
+            return "failed", str(e)
 
     def close_session(self, session_id: str) -> bool:
         self._acquire_lock()
