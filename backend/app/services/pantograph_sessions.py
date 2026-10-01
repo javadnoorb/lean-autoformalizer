@@ -243,40 +243,48 @@ class PantographSessionManager:
 
             site = self._Site(goal_id=goal_id) if goal_id is not None else self._Site()
             t0 = time.time()
-            try:
-                new_state = session.server.goal_tactic(session.state, tactic=tactic, site=site)
+            status, payload = self._apply_tactic_step(session, session.state, tactic, site)
+            session.last_used_at = time.time()
+            duration_ms = int((time.time() - t0) * 1000)
+
+            if status == "success":
+                new_state = payload
                 session.state = new_state
-                session.last_used_at = time.time()
                 return {
                     "status": "success",
                     "message": None,
                     "remaining_goals": [str(g) for g in new_state.goals],
                     "is_solved": new_state.is_solved,
-                    "duration_ms": int((time.time() - t0) * 1000),
+                    "duration_ms": duration_ms,
                 }
-            except self._TacticFailure as e:
-                session.last_used_at = time.time()
-                return {
-                    "status": "failed",
-                    "message": str(e),
-                    "remaining_goals": [str(g) for g in session.state.goals],
-                    "is_solved": False,
-                    "duration_ms": int((time.time() - t0) * 1000),
-                }
-            except self._ServerError as e:
-                if getattr(session.server, "proc", None) is None:
-                    self._sessions.pop(session_id, None)
-                    raise InteractiveSessionCrashedError(str(e)) from e
-                session.last_used_at = time.time()
-                return {
-                    "status": "failed",
-                    "message": str(e),
-                    "remaining_goals": [str(g) for g in session.state.goals],
-                    "is_solved": False,
-                    "duration_ms": int((time.time() - t0) * 1000),
-                }
+            return {
+                "status": "failed",
+                "message": payload,
+                "remaining_goals": [str(g) for g in session.state.goals],
+                "is_solved": False,
+                "duration_ms": duration_ms,
+            }
         finally:
             self._lock.release()
+
+    def _apply_tactic_step(self, session: "_Session", state: Any, tactic: str, site: Any):
+        """A single goal_tactic call, assuming self._lock is already held.
+        Returns ("success", new_state) or ("failed", message); raises
+        InteractiveSessionCrashedError (and evicts the session) on a
+        dead-process ServerError. Factored out of apply_tactic so other
+        callers that chain several tactic calls under one lock acquisition
+        reuse the exact same crash-eviction semantics; site selection stays
+        with each caller."""
+        try:
+            new_state = session.server.goal_tactic(state, tactic=tactic, site=site)
+            return "success", new_state
+        except self._TacticFailure as e:
+            return "failed", str(e)
+        except self._ServerError as e:
+            if getattr(session.server, "proc", None) is None:
+                self._sessions.pop(session.id, None)
+                raise InteractiveSessionCrashedError(str(e)) from e
+            return "failed", str(e)
 
     def close_session(self, session_id: str) -> bool:
         self._acquire_lock()
