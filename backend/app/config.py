@@ -40,6 +40,20 @@ class Settings(BaseSettings):
     INTERACTIVE_LOCK_WAIT_SECS: int = int(os.getenv("INTERACTIVE_LOCK_WAIT_SECS", "45"))
     INTERACTIVE_IMPORTS: str = os.getenv("INTERACTIVE_IMPORTS", "Mathlib")
 
+    # Automated tactic search over an interactive session (see
+    # PantographSessionManager.run_search): bounded depth-first search with
+    # backtracking over this fixed tactic library, applied one step at a
+    # time through the same server.goal_tactic() primitive a human/test
+    # client would drive manually. No LLM-proposed tactics yet -- see
+    # .claude/skills/lean-interactive-search/SKILL.md.
+    INTERACTIVE_SEARCH_TACTICS: str = os.getenv(
+        "INTERACTIVE_SEARCH_TACTICS",
+        "rfl,intro,trivial,simp,omega,decide,norm_num,ring,linarith,tauto,"
+        "assumption,constructor,left,right,aesop,simp_all",
+    )
+    INTERACTIVE_SEARCH_MAX_DEPTH: int = int(os.getenv("INTERACTIVE_SEARCH_MAX_DEPTH", "6"))
+    INTERACTIVE_SEARCH_MAX_ATTEMPTS: int = int(os.getenv("INTERACTIVE_SEARCH_MAX_ATTEMPTS", "40"))
+
     class Config:
         env_file = ".env"
         extra = "ignore"

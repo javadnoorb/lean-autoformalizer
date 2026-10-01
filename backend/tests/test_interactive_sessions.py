@@ -88,6 +88,57 @@ class FakeServer:
         self.proc = None
 
 
+class ScriptedGoalServer:
+    """Stands in for pantograph.server.Server for search tests. Unlike
+    FakeServer's linear `script` queue, goal_tactic's outcome here depends
+    on (current-goal-text, tactic) via `transitions`, so a test can define a
+    small proof tree (dead ends included) rather than one fixed sequence --
+    needed because run_search tries many candidate tactics per goal state,
+    not one tactic per call in a known order."""
+
+    def __init__(self, start_goal, transitions):
+        self.proc = FakeProc()
+        self._closed = False
+        self.start_goal = start_goal
+        self.transitions = transitions
+        self.calls = []
+
+    def restart(self):
+        pass
+
+    def goal_start(self, statement):
+        return FakeGoalState([self.start_goal])
+
+    def goal_tactic(self, state, tactic, site):
+        goal_text = str(state.goals[0])
+        self.calls.append((goal_text, tactic))
+        outcome = self.transitions.get((goal_text, tactic))
+        if outcome is None:
+            raise FakeTacticFailure(f"tactic {tactic!r} does not apply to {goal_text!r}")
+        if outcome == "SOLVED":
+            return FakeGoalState([], is_solved=True)
+        if outcome == "CRASH":
+            self.proc = None
+            raise FakeServerError("pantograph-repl died")
+        return FakeGoalState([outcome])
+
+    def _close(self):
+        self._closed = True
+        self.proc = None
+
+
+def make_scripted_manager(start_goal, transitions, max_sessions=2):
+    settings.INTERACTIVE_MAX_SESSIONS = max_sessions
+    mgr = PantographSessionManager()
+    mgr.available = True
+    mgr._server_cls = lambda *args, **kwargs: ScriptedGoalServer(start_goal, transitions)
+    mgr._Site = FakeSite
+    mgr._TacticFailure = FakeTacticFailure
+    mgr._ServerError = FakeServerError
+    mgr._get_lean_path = lambda project_dir: None
+    return mgr
+
+
 def make_manager(max_sessions=2):
     settings.INTERACTIVE_MAX_SESSIONS = max_sessions
     mgr = PantographSessionManager()
@@ -213,6 +264,129 @@ def test_shutdown_closes_everything():
     assert len(mgr._sessions) == 0
     assert mgr._sessions.get(a["session_id"]) is None
     assert mgr._sessions.get(b["session_id"]) is None
+
+
+# --- Automated tactic search (run_search) ---
+
+def test_search_solves_directly():
+    mgr = make_scripted_manager("⊢ P", {("⊢ P", "rfl"): "SOLVED"})
+    started = mgr.start_session("P")
+
+    result = mgr.run_search(started["session_id"])
+    assert result["success"] is True
+    assert result["is_solved"] is True
+    assert result["tactics"] == ["rfl"]
+    assert result["attempts"] == 1
+    assert result["remaining_goals"] == []
+
+
+def test_search_backtracks_out_of_a_dead_end():
+    # "intro" looks promising (it succeeds) but leads nowhere; the search
+    # must abandon that branch and fall back to a later tactic at the root.
+    mgr = make_scripted_manager(
+        "⊢ P",
+        {
+            ("⊢ P", "intro"): "⊢ P1",  # succeeds, but "⊢ P1" is a dead end
+            ("⊢ P", "omega"): "SOLVED",
+        },
+    )
+    started = mgr.start_session("P")
+
+    result = mgr.run_search(started["session_id"])
+    assert result["success"] is True
+    assert result["tactics"] == ["omega"]
+    # The abandoned "intro" branch must still show up in the trace.
+    assert any(s["tactic"] == "intro" and s["status"] == "success" for s in result["trace"])
+    session = mgr._sessions[started["session_id"]]
+    assert session.state.is_solved is True
+
+
+def test_search_finds_multi_step_solution():
+    mgr = make_scripted_manager(
+        "⊢ P",
+        {
+            ("⊢ P", "intro"): "⊢ Q",
+            ("⊢ Q", "omega"): "SOLVED",
+        },
+    )
+    started = mgr.start_session("P")
+
+    result = mgr.run_search(started["session_id"])
+    assert result["success"] is True
+    assert result["tactics"] == ["intro", "omega"]
+
+
+def test_search_fails_when_no_path_exists():
+    mgr = make_scripted_manager("⊢ P", {})  # no transitions -- every tactic fails
+    started = mgr.start_session("P")
+
+    result = mgr.run_search(started["session_id"])
+    assert result["success"] is False
+    assert result["is_solved"] is False
+    assert result["tactics"] == []
+    # A failed search must not have mutated session state.
+    session = mgr._sessions[started["session_id"]]
+    assert session.state.is_solved is False
+
+
+def test_search_respects_max_depth():
+    mgr = make_scripted_manager(
+        "⊢ P",
+        {
+            ("⊢ P", "intro"): "⊢ Q",
+            ("⊢ Q", "omega"): "SOLVED",
+        },
+    )
+    started = mgr.start_session("P")
+
+    result = mgr.run_search(started["session_id"], max_depth=1)
+    assert result["success"] is False
+
+
+def test_search_respects_max_attempts():
+    mgr = make_scripted_manager("⊢ P", {("⊢ P", "omega"): "SOLVED"})
+    started = mgr.start_session("P")
+
+    # "omega" is 5th in the default tactic order (rfl, intro, trivial,
+    # simp, omega, ...) -- capping attempts before it's tried must fail.
+    result = mgr.run_search(started["session_id"], max_attempts=2)
+    assert result["success"] is False
+    assert result["attempts"] == 2
+
+
+def test_search_unknown_session_raises():
+    mgr = make_scripted_manager("⊢ P", {})
+    with pytest.raises(InteractiveSessionNotFoundError):
+        mgr.run_search("does-not-exist")
+
+
+def test_search_server_crash_evicts_session():
+    mgr = make_scripted_manager("⊢ P", {("⊢ P", "rfl"): "CRASH"})
+    started = mgr.start_session("P")
+
+    with pytest.raises(InteractiveSessionCrashedError):
+        mgr.run_search(started["session_id"])
+    assert started["session_id"] not in mgr._sessions
+
+
+def test_search_route_returns_winning_tactics(monkeypatch):
+    mgr = make_scripted_manager("⊢ P", {("⊢ P", "rfl"): "SOLVED"})
+    monkeypatch.setattr("app.main.pantograph_sessions", mgr)
+
+    started = mgr.start_session("P")
+    resp = client.post(f"/api/interactive/sessions/{started['session_id']}/search", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["tactics"] == ["rfl"]
+
+
+def test_search_route_404_on_unknown_session(monkeypatch):
+    mgr = make_scripted_manager("⊢ P", {})
+    monkeypatch.setattr("app.main.pantograph_sessions", mgr)
+
+    resp = client.post("/api/interactive/sessions/does-not-exist/search", json={})
+    assert resp.status_code == 404
 
 
 # --- Route-wiring tests via TestClient, monkeypatching the app singleton ---
