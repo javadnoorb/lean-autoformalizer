@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     LEAN_TIMEOUT_SECS: int = int(os.getenv("LEAN_TIMEOUT_SECS", "15"))
     ALLOW_MOCK_FALLBACK: bool = os.getenv("ALLOW_MOCK_FALLBACK", "true").lower() in ("true", "1", "yes")
 
+    # Interactive (PyPantograph-backed) session limits. Unlike the rest of
+    # this app, each interactive session holds a multi-GB resident process
+    # across requests, so it needs real limits -- see
+    # app/services/pantograph_sessions.py.
+    INTERACTIVE_MAX_SESSIONS: int = int(os.getenv("INTERACTIVE_MAX_SESSIONS", "2"))
+    INTERACTIVE_SESSION_IDLE_TIMEOUT_SECS: int = int(os.getenv("INTERACTIVE_SESSION_IDLE_TIMEOUT_SECS", "600"))
+    INTERACTIVE_SESSION_SWEEP_INTERVAL_SECS: int = int(os.getenv("INTERACTIVE_SESSION_SWEEP_INTERVAL_SECS", "60"))
+    INTERACTIVE_SESSION_START_TIMEOUT_SECS: int = int(os.getenv("INTERACTIVE_SESSION_START_TIMEOUT_SECS", "120"))
+    # Every Pantograph call, across every session, is serialized through one
+    # process-wide lock (see pantograph_sessions.py docstring for why). This
+    # bounds how long a request queues for it before failing with a 503.
+    INTERACTIVE_LOCK_WAIT_SECS: int = int(os.getenv("INTERACTIVE_LOCK_WAIT_SECS", "45"))
+    INTERACTIVE_IMPORTS: str = os.getenv("INTERACTIVE_IMPORTS", "Mathlib")
+
     class Config:
         env_file = ".env"
         extra = "ignore"

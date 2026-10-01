@@ -12,11 +12,26 @@ from app.models.schemas import (
     VerifyRequest,
     VerifyResponse,
     SystemStatusResponse,
+    InteractiveSessionStartRequest,
+    InteractiveSessionStartResponse,
+    InteractiveTacticRequest,
+    InteractiveTacticResponse,
+    InteractiveSessionCloseResponse,
+    InteractiveStatusResponse,
 )
 from app.services.lean_runner import lean_runner
 from app.services.autoformalizer import autoformalizer
 from app.services.prover import prover
 from app.services.leandojo_harness import leandojo_harness
+from app.services.pantograph_sessions import (
+    pantograph_sessions,
+    InteractiveUnavailableError,
+    InteractiveCapacityError,
+    InteractiveSessionNotFoundError,
+    InteractiveEngineBusyError,
+    InteractiveSessionCrashedError,
+    InteractiveStatementError,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +41,9 @@ async def lifespan(app: FastAPI):
     # so it would otherwise run forever, burning CPU/memory until someone
     # notices and kills it by hand.
     lean_runner.kill_all_active()
+    # Same reasoning, heavier consequence: an idle-but-alive interactive
+    # session holds a multi-GB Mathlib process resident indefinitely.
+    pantograph_sessions.shutdown()
 
 app = FastAPI(
     title="Lean 4 Autoformalizer & Prover API",
@@ -115,6 +133,51 @@ def prove(req: ProveRequest):
 @app.post("/api/verify", response_model=VerifyResponse)
 def verify(req: VerifyRequest):
     return lean_runner.verify(req.lean_code)
+
+@app.get("/api/interactive/status", response_model=InteractiveStatusResponse)
+def get_interactive_status():
+    return pantograph_sessions.get_status()
+
+@app.post("/api/interactive/sessions", response_model=InteractiveSessionStartResponse)
+def start_interactive_session(req: InteractiveSessionStartRequest):
+    if not req.statement.strip():
+        raise HTTPException(status_code=400, detail="statement cannot be empty.")
+    try:
+        return pantograph_sessions.start_session(req.statement, req.theorem_name)
+    except InteractiveUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except InteractiveEngineBusyError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except InteractiveCapacityError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except InteractiveStatementError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/interactive/sessions/{session_id}", response_model=InteractiveSessionStartResponse)
+def get_interactive_session(session_id: str):
+    try:
+        return pantograph_sessions.get_session_state(session_id)
+    except InteractiveSessionNotFoundError:
+        raise HTTPException(status_code=404, detail=f"no active session '{session_id}'")
+
+@app.post("/api/interactive/sessions/{session_id}/tactic", response_model=InteractiveTacticResponse)
+def apply_interactive_tactic(session_id: str, req: InteractiveTacticRequest):
+    try:
+        result = pantograph_sessions.apply_tactic(session_id, req.tactic, req.goal_id)
+        return InteractiveTacticResponse(session_id=session_id, tactic=req.tactic, **result)
+    except InteractiveSessionNotFoundError:
+        raise HTTPException(status_code=404, detail=f"no active session '{session_id}'")
+    except InteractiveEngineBusyError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except InteractiveSessionCrashedError as e:
+        raise HTTPException(status_code=500, detail=f"interactive session crashed and was closed: {e}")
+
+@app.delete("/api/interactive/sessions/{session_id}", response_model=InteractiveSessionCloseResponse)
+def close_interactive_session(session_id: str):
+    closed = pantograph_sessions.close_session(session_id)
+    if not closed:
+        raise HTTPException(status_code=404, detail=f"no active session '{session_id}'")
+    return InteractiveSessionCloseResponse(session_id=session_id, closed=True)
 
 @app.get("/")
 def root():

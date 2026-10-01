@@ -72,3 +72,36 @@ class SystemStatusResponse(BaseModel):
     lean_version: Optional[str] = None
     gemini_key_configured: bool
     model: str
+
+class InteractiveSessionStartRequest(BaseModel):
+    statement: str = Field(..., description="Lean 4 expression/type to open a goal for, e.g. 'forall (a b : Nat), a + b = b + a'")
+    theorem_name: Optional[str] = Field(default=None)
+
+class InteractiveSessionStartResponse(BaseModel):
+    session_id: str
+    goals: List[str] = Field(default_factory=list)
+    is_solved: bool = False
+
+class InteractiveTacticRequest(BaseModel):
+    tactic: str
+    goal_id: Optional[int] = Field(default=None, description="Index into the session's current goal list (Pantograph's Site(goal_id=...)); omit to target the default goal")
+
+class InteractiveTacticResponse(BaseModel):
+    session_id: str
+    tactic: str
+    status: str  # 'success' or 'failed'
+    message: Optional[str] = None
+    remaining_goals: List[str] = Field(default_factory=list)
+    is_solved: bool = False
+    duration_ms: int = 0
+
+class InteractiveSessionCloseResponse(BaseModel):
+    session_id: str
+    closed: bool
+
+class InteractiveStatusResponse(BaseModel):
+    available: bool
+    description: str
+    active_sessions: int = 0
+    max_sessions: int = 0
+    idle_timeout_secs: int = 0
