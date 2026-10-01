@@ -43,7 +43,10 @@ cloud_bench_run() {
 
   echo "Running the benchmark on $ip (this streams live)..." >&2
   echo "Logging to $log_file" >&2
-  ssh -o StrictHostKeyChecking=accept-new "root@$ip" 'bash -s' \
+  # REMOTE_ENV_EXPORTS (optional, set by the caller before sourcing this
+  # file) is a literal shell-assignment prefix, e.g. "BENCH_REF='main'" --
+  # applied only to the remote `bash -s` invocation's environment.
+  ssh -o StrictHostKeyChecking=accept-new "root@$ip" "${REMOTE_ENV_EXPORTS:-} bash -s" \
     < "$REMOTE_SCRIPT" | tee "$log_file"
 
   if [ "$keep" -eq 1 ]; then
