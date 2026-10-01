@@ -338,3 +338,81 @@ hardware now that "does it even work" is settled:
 Before committing to hand-rolling a `repl` wrapper, it's still worth a
 quick, time-boxed check of LeanCopilot's LLM-calling mechanism (not yet
 looked at) in case it sidesteps this problem in a different way.
+
+## Status: option 1 (PyPantograph as-is) foundation built
+
+`backend/app/services/pantograph_sessions.py` implements a session-based
+API around PyPantograph (`/api/interactive/status|sessions|.../tactic`) --
+start a session, apply tactics one at a time, close it, with a hard cap on
+concurrent sessions and idle-eviction (each session is a multi-GB resident
+process). One correctness constraint worth remembering if extending this:
+PyPantograph's sync methods share **one process-wide asyncio event loop**
+across every `Server` instance (verified against the installed source,
+`pantograph/utils.py`'s `to_sync`), so every call into it -- across every
+session -- is serialized through a single lock in
+`PantographSessionManager`. This is required correctness, not an
+optimization to relax later.
+
+No automated tactic-search/model-driven loop yet (a human/test client
+supplies each tactic) and no frontend changes -- deliberately deferred to
+a later phase. End-to-end verification (this can't run on the local dev
+machine) is `deploy/pantograph-service-bench.sh`, which deploys the real
+app to a throwaway cloud VM and `curl`s the actual endpoints.
+
+**Verified end-to-end against the real deployed app (PR #20): full
+success.** `POST /api/interactive/sessions` (real Mathlib import): 33s.
+`POST .../tactic` with `intro a b`: 12ms. `POST .../tactic` with
+`exact Nat.add_comm a b`: <1ms, `is_solved: true`. Close, re-check
+`active_sessions: 0`, 404 on an unknown session id, 429 past
+`INTERACTIVE_MAX_SESSIONS` -- all correct. This is the actual FastAPI app
+(not a standalone script) doing real interactive tactic search over HTTP.
+
+## Status: deterministic automated tactic search added (this PR)
+
+Closes part of the "no automated tactic-search loop yet" gap noted above.
+`PantographSessionManager.run_search` (new `POST
+/api/interactive/sessions/{id}/search`) is a bounded depth-first search
+with backtracking over a fixed tactic library
+(`INTERACTIVE_SEARCH_TACTICS`, default `rfl,intro,trivial,simp,omega,
+decide,norm_num,ring,linarith,tauto,assumption,constructor,left,right,
+aesop,simp_all`), automating what previously required a human/test client
+to call `apply_tactic` once per step. It's built entirely on the existing
+primitive -- same `goal_tactic` calls, same `_TacticFailure`/`_ServerError`
+handling -- just chained together server-side instead of over HTTP per
+step.
+
+Two design choices worth remembering if extending this further:
+
+- **Backtracking is free, by construction.** PyPantograph `GoalState`
+  objects are immutable snapshots (confirmed by the existing branching
+  test in the PyPantograph section above), so trying the next candidate
+  tactic against the same parent state after a dead end is just another
+  `goal_tactic` call, not an explicit undo/rollback mechanism. A losing
+  branch never touches `session.state` -- only a solving path is
+  committed at the end, exactly like a failed `apply_tactic` call leaves
+  `session.state` alone.
+- **The whole search is one critical section**, unlike `apply_tactic`
+  which re-acquires the process-wide Pantograph lock per call. Releasing
+  it between search steps would let a concurrent `apply_tactic()` request
+  on the same session commit a state the search's backtracking doesn't
+  know about -- the same class of race the single-event-loop lock exists
+  to prevent in the first place, just at the session level instead of the
+  process level. The cost: other interactive requests queue behind a
+  running search (bounded by `INTERACTIVE_LOCK_WAIT_SECS`) instead of
+  interleaving with it. With the default bounds (`max_depth=6`,
+  `max_attempts=40`) and the sub-20ms tactic latency measured in the cloud
+  benchmark above, a search finishes well inside that window; only very
+  aggressive overrides (large `max_attempts` combined with a slow tactic
+  like `aesop` dominating the tactic list) would risk starving other
+  sessions.
+
+**Still not done, deliberately**: no LLM/model-driven tactic proposals
+(DeepSeek-Prover or otherwise) -- the tactic list is a fixed, hand-picked
+library, not a model's suggestions, so this is a smarter fast-hammer, not
+the "eventual goal" described at the top of this doc. No frontend changes.
+Not yet verified against a real PyPantograph+Mathlib install (only against
+the hand-written `ScriptedGoalServer` fakes in
+`backend/tests/test_interactive_sessions.py`, same reasoning as the rest
+of this test suite) -- if picking this up again, extend
+`deploy/pantograph-service-bench.sh` to exercise `/search` the same way it
+already exercises `/tactic`.

@@ -211,3 +211,27 @@ exact version the local PyPantograph submodule fix was matched against),
 builds PyPantograph from that same fixed source, then times
 `Server(imports=['Mathlib'])` followed by a `goal_start`/`goal_tactic`
 call, the same measurement taken locally.
+
+**Result: 33.2s to start a session (vs. 35+ min hung locally), then 17ms
+per `goal_tactic` call with a correct `is_solved`.** Full writeup in
+`.claude/skills/lean-interactive-search/SKILL.md`.
+
+## Interactive session API benchmark (exercises the real app, not just the library)
+
+```bash
+deploy/pantograph-service-bench.sh run          # create a VM, deploy this app, curl the real endpoints, auto-destroy
+deploy/pantograph-service-bench.sh run --keep   # same, but leave the VM up afterward
+deploy/pantograph-service-bench.sh ssh          # SSH into a --keep'd VM
+deploy/pantograph-service-bench.sh destroy      # tear down a --keep'd VM
+```
+
+One level up from `pantograph-bench.sh`: instead of a standalone Python
+script calling PyPantograph directly, this sets up the same version-matched
+PyPantograph install, then clones this repo (`BENCH_REF` env var, default
+the current local branch), installs `backend/requirements.txt` into the
+same venv, launches the real `uvicorn app.main:app`, and drives the actual
+`/api/interactive/*` endpoints (`backend/app/services/pantograph_sessions.py`)
+with `curl` -- start a session, apply tactics, confirm `is_solved`, close
+it, and check the `INTERACTIVE_MAX_SESSIONS` 429 and unknown-session 404
+paths for real. This is the only way to verify that service end-to-end,
+since it needs the same properly-sized hardware the library itself does.
