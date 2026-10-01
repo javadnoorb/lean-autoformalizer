@@ -145,3 +145,69 @@ If you'd rather not repeat the Gemini API key step each time, take a
 **snapshot** after step 3 completes once; deploying from that snapshot next
 time skips straight to a running app (you'll get a new IP, and Vultr charges
 a small ongoing fee for snapshot storage while the instance is destroyed).
+
+## Mathlib import benchmark (throwaway VM, unrelated to the app deploy above)
+
+```bash
+deploy/mathlib-bench.sh run          # create a VM, time `import Mathlib`, auto-destroy when done
+deploy/mathlib-bench.sh run --keep   # same, but leave the VM up afterward to poke around
+deploy/mathlib-bench.sh ssh          # SSH into a --keep'd VM
+deploy/mathlib-bench.sh destroy      # tear down a --keep'd VM (or clean up after a failed run)
+```
+
+`run` tears the VM down automatically on exit -- success, failure, or
+Ctrl-C -- unless `--keep` is passed, since the real cost risk here is
+forgetting to destroy a billed instance, not destroying one too eagerly.
+Since the VM (and its own copy of the results) disappears at the end,
+`run` `tee`s everything the remote script prints to a local, timestamped
+file under `deploy/mathlib-bench-results/` (gitignored) as it streams
+back over SSH -- that's the durable record, not anything left on the VM.
+
+Answers "is Mathlib-import slowness a resource ceiling on this dev machine,
+or inherent to the tool/approach?" (see
+`.claude/skills/lean-interactive-search/SKILL.md` for the investigation
+that raised the question -- locally, a bare `import Mathlib` took 1h08m and
+thrashed on a 6GB-RAM box holding a 6GB Mathlib build). Provisions a
+separate, separately-tracked `vhf-3c-8gb` instance (8GB RAM, high-frequency
+CPU, ~$48/mo i.e. a few cents for a one-off run) via the same `vultr-vm.sh`
+create/destroy this deploy uses, but under a different label/state file so
+it can never collide with the tracked app instance. Deliberately skips
+`harden-vm.sh` -- this box only lives for the length of the test and is
+destroyed right after, so the security hardening buys nothing here. On the
+VM it installs `elan`, clones `mathlib4` at latest master, runs
+`lake exe cache get` to pull prebuilt `.olean`s (falling back to a
+from-source `lake build Mathlib` only if the cache doesn't cover that
+commit), then times `lake env lean` on a file containing just
+`import Mathlib` via `/usr/bin/time -v`.
+
+**Result (see `.claude/skills/lean-interactive-search/SKILL.md` for the
+full context): confirmed it's the RAM, not the tools.** Cache fetch 68s,
+`import Mathlib` itself 21.58s wall clock, peak RSS 6.1GB, 40,946 major
+page faults -- versus 1h08m and 599,255 major page faults on the local
+6GB-capped box for the identical import. ~190x faster from 2GB of extra
+headroom alone.
+
+The create/wait-for-ssh/log/auto-destroy machinery both this script and
+`pantograph-bench.sh` (below) share lives in `cloud-bench-lib.sh`, sourced
+by each -- if you're adding a third one-off cloud benchmark, add a new
+`<name>-bench.sh` + `<name>-bench-remote.sh` pair following the same
+pattern rather than writing the orchestration again.
+
+## PyPantograph Mathlib benchmark (same idea, for the actual interactive-search tool)
+
+```bash
+deploy/pantograph-bench.sh run          # create a VM, time Server(imports=['Mathlib']), auto-destroy
+deploy/pantograph-bench.sh run --keep   # same, but leave the VM up afterward
+deploy/pantograph-bench.sh ssh          # SSH into a --keep'd VM
+deploy/pantograph-bench.sh destroy      # tear down a --keep'd VM
+```
+
+Same throwaway-VM pattern as `mathlib-bench.sh`, but for the thing that
+actually matters for interactive search: locally, PyPantograph's
+`Server(imports=['Mathlib'], ...)` hung 35+ minutes on the 6GB-RAM box
+without ever reaching "ready" (see the SKILL.md section on PyPantograph).
+On the VM, it sets up a minimal project pinned to Mathlib `v4.33.1` (the
+exact version the local PyPantograph submodule fix was matched against),
+builds PyPantograph from that same fixed source, then times
+`Server(imports=['Mathlib'])` followed by a `goal_start`/`goal_tactic`
+call, the same measurement taken locally.

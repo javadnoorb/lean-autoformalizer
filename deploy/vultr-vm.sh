@@ -9,14 +9,17 @@
 # valid API key (~/.vultr-cli.yaml or VULTR_API_KEY env var).
 set -euo pipefail
 
-LABEL="lean-autoformalizer"
-REGION="ewr"
-PLAN="vc2-1c-1gb"
-OS_ID=2284 # Ubuntu 24.04 LTS x64
+# All of these are overridable via env var so other scripts (e.g.
+# mathlib-bench.sh) can reuse this create/destroy logic for a differently
+# sized, separately tracked instance without touching the main app's.
+LABEL="${LABEL:-lean-autoformalizer}"
+REGION="${REGION:-ewr}"
+PLAN="${PLAN:-vc2-1c-1gb}"
+OS_ID="${OS_ID:-2284}" # Ubuntu 24.04 LTS x64
 SSH_KEY_NAME="${SSH_KEY_NAME:-$(hostname)-lean-autoformalizer}"
 SSH_PUBKEY_FILE="${SSH_PUBKEY_FILE:-$HOME/.ssh/id_ed25519.pub}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STATE_FILE="$SCRIPT_DIR/.vultr-instance-id"
+STATE_FILE="${STATE_FILE:-$SCRIPT_DIR/.vultr-instance-id}"
 
 require_cli() {
   command -v vultr-cli &>/dev/null || {
