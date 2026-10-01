@@ -18,6 +18,8 @@ from app.models.schemas import (
     InteractiveTacticResponse,
     InteractiveSessionCloseResponse,
     InteractiveStatusResponse,
+    InteractiveSearchRequest,
+    InteractiveSearchResponse,
 )
 from app.services.lean_runner import lean_runner
 from app.services.autoformalizer import autoformalizer
@@ -165,6 +167,17 @@ def apply_interactive_tactic(session_id: str, req: InteractiveTacticRequest):
     try:
         result = pantograph_sessions.apply_tactic(session_id, req.tactic, req.goal_id)
         return InteractiveTacticResponse(session_id=session_id, tactic=req.tactic, **result)
+    except InteractiveSessionNotFoundError:
+        raise HTTPException(status_code=404, detail=f"no active session '{session_id}'")
+    except InteractiveEngineBusyError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except InteractiveSessionCrashedError as e:
+        raise HTTPException(status_code=500, detail=f"interactive session crashed and was closed: {e}")
+
+@app.post("/api/interactive/sessions/{session_id}/search", response_model=InteractiveSearchResponse)
+def search_interactive_session(session_id: str, req: InteractiveSearchRequest):
+    try:
+        return pantograph_sessions.run_search(session_id, req.max_depth, req.max_attempts)
     except InteractiveSessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"no active session '{session_id}'")
     except InteractiveEngineBusyError as e:

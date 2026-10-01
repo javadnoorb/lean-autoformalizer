@@ -95,6 +95,27 @@ class InteractiveTacticResponse(BaseModel):
     is_solved: bool = False
     duration_ms: int = 0
 
+class InteractiveSearchRequest(BaseModel):
+    max_depth: Optional[int] = Field(default=None, description="Override INTERACTIVE_SEARCH_MAX_DEPTH for this search")
+    max_attempts: Optional[int] = Field(default=None, description="Override INTERACTIVE_SEARCH_MAX_ATTEMPTS for this search")
+
+class InteractiveSearchStep(BaseModel):
+    depth: int
+    tactic: str
+    status: str  # 'success' or 'failed'
+    message: Optional[str] = None
+    remaining_goals: List[str] = Field(default_factory=list)
+
+class InteractiveSearchResponse(BaseModel):
+    session_id: str
+    success: bool = Field(..., description="True if the search found a tactic sequence that closes every goal")
+    is_solved: bool = False
+    tactics: List[str] = Field(default_factory=list, description="Winning tactic sequence, in order; empty if not solved")
+    remaining_goals: List[str] = Field(default_factory=list)
+    attempts: int = Field(default=0, description="Total goal_tactic calls made, including backtracked/failed branches")
+    duration_ms: int = 0
+    trace: List[InteractiveSearchStep] = Field(default_factory=list, description="Every tactic attempted, in order, including dead ends that were backtracked out of")
+
 class InteractiveSessionCloseResponse(BaseModel):
     session_id: str
     closed: bool
