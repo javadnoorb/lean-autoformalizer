@@ -4,7 +4,7 @@
 # Mathlib's 6GB .olean footprint -- see
 # .claude/skills/lean-interactive-search/SKILL.md for the full writeup)?
 #
-# Reuses vultr-vm.sh's create/destroy logic (same vultr-cli, same state-file
+# Reuses cloud-vm's vultr-vm.sh create/destroy logic (same vultr-cli, same state-file
 # pattern) with its own label/plan/state file so it never touches the
 # tracked production instance. Deliberately skips harden-vm.sh: this box
 # lives only as long as the test and is destroyed right after, so the
@@ -31,6 +31,8 @@ export STATE_FILE="$SCRIPT_DIR/.vultr-bench-instance-id"
 REMOTE_SCRIPT="$SCRIPT_DIR/mathlib-bench-remote.sh"
 RESULTS_DIR="$SCRIPT_DIR/mathlib-bench-results"
 
-# shellcheck source=cloud-bench-lib.sh
-source "$SCRIPT_DIR/cloud-bench-lib.sh"
+# shellcheck source=cloud-vm-env.sh
+source "$SCRIPT_DIR/cloud-vm-env.sh"
+# shellcheck source=/dev/null
+source "$CLOUD_VM_DIR/cloud-bench-lib.sh"
 cloud_bench_dispatch "$@"

@@ -16,6 +16,13 @@ Tailscale URL for reaching it from another device (e.g. your phone).
 
 ## Vultr (mock-mode, for hosting)
 
+The generic VM scripts (`vultr-vm.sh`, `harden-vm.sh`, `cloud-bench-lib.sh`)
+live in their own repo, shared with other projects:
+[cloud-vm](https://github.com/javadnoorb/cloud-vm). Clone it to
+`~/projects/cloud-vm` (or set `CLOUD_VM_DIR`); `deploy/cloud-vm-env.sh`
+finds it. `deploy/vultr-vm.sh` here is a thin wrapper that adds this app's
+label and state file.
+
 This deploys the frontend + backend in mock mode (`ALLOW_MOCK_FALLBACK=true`,
 no real Lean/Mathlib toolchain). Verification calls fall back to the mock
 validator; theorem formalization still uses the Gemini API.
@@ -67,7 +74,7 @@ prints the VM's IP and records the instance ID in `deploy/.vultr-instance-id`
 ### 2. Harden the VM
 
 ```bash
-ssh root@<vm-ip> 'bash -s' < deploy/harden-vm.sh
+ssh root@<vm-ip> 'bash -s' < ~/projects/cloud-vm/harden-vm.sh
 ```
 
 This creates a non-root `deploy` user (with your SSH key and passwordless
@@ -188,8 +195,8 @@ page faults -- versus 1h08m and 599,255 major page faults on the local
 headroom alone.
 
 The create/wait-for-ssh/log/auto-destroy machinery both this script and
-`pantograph-bench.sh` (below) share lives in `cloud-bench-lib.sh`, sourced
-by each -- if you're adding a third one-off cloud benchmark, add a new
+`pantograph-bench.sh` (below) share lives in the cloud-vm repo's
+`cloud-bench-lib.sh`, sourced by each -- if you're adding a third one-off cloud benchmark, add a new
 `<name>-bench.sh` + `<name>-bench-remote.sh` pair following the same
 pattern rather than writing the orchestration again.
 

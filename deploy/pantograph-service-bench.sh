@@ -3,7 +3,7 @@
 # (backend/app/services/pantograph_sessions.py) against real Mathlib on
 # properly-sized hardware -- this can never be exercised on the local dev
 # machine (6GB RAM cap). Same throwaway-VM pattern as mathlib-bench.sh /
-# pantograph-bench.sh (see cloud-bench-lib.sh), its own label/state file so
+# pantograph-bench.sh (see cloud-bench-lib.sh in the cloud-vm repo), its own label/state file so
 # none of the three benchmarks or the production app instance can collide.
 # Skips harden-vm.sh for the same reason as the other benches: this box
 # only lives for the length of the test.
@@ -29,6 +29,8 @@ export REMOTE_ENV_EXPORTS="BENCH_REF='$BENCH_REF'"
 REMOTE_SCRIPT="$SCRIPT_DIR/pantograph-service-bench-remote.sh"
 RESULTS_DIR="$SCRIPT_DIR/pantograph-service-bench-results"
 
-# shellcheck source=cloud-bench-lib.sh
-source "$SCRIPT_DIR/cloud-bench-lib.sh"
+# shellcheck source=cloud-vm-env.sh
+source "$SCRIPT_DIR/cloud-vm-env.sh"
+# shellcheck source=/dev/null
+source "$CLOUD_VM_DIR/cloud-bench-lib.sh"
 cloud_bench_dispatch "$@"

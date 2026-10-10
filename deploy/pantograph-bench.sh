@@ -7,7 +7,7 @@
 # .claude/skills/lean-interactive-search/SKILL.md for the full writeup.
 #
 # Same create/destroy/log/auto-destroy machinery as mathlib-bench.sh (see
-# cloud-bench-lib.sh), its own label/plan/state file so the two benchmarks
+# cloud-bench-lib.sh in the cloud-vm repo), its own label/plan/state file so the two benchmarks
 # and the production app instance never collide. Skips harden-vm.sh for
 # the same reason: this box only lives for the length of the test.
 #
@@ -30,6 +30,8 @@ export STATE_FILE="$SCRIPT_DIR/.vultr-pantograph-bench-instance-id"
 REMOTE_SCRIPT="$SCRIPT_DIR/pantograph-bench-remote.sh"
 RESULTS_DIR="$SCRIPT_DIR/pantograph-bench-results"
 
-# shellcheck source=cloud-bench-lib.sh
-source "$SCRIPT_DIR/cloud-bench-lib.sh"
+# shellcheck source=cloud-vm-env.sh
+source "$SCRIPT_DIR/cloud-vm-env.sh"
+# shellcheck source=/dev/null
+source "$CLOUD_VM_DIR/cloud-bench-lib.sh"
 cloud_bench_dispatch "$@"

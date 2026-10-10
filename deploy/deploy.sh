@@ -16,6 +16,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cloud-vm-env.sh
+source "$SCRIPT_DIR/cloud-vm-env.sh"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEFAULT_KEY_FILE="$HOME/.config/lean-autoformalizer/gemini-api-key"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=8)
@@ -41,7 +43,7 @@ for _ in $(seq 1 30); do
 done
 
 echo "==> Hardening..."
-ssh "${SSH_OPTS[@]}" "root@$ip" 'bash -s' < "$SCRIPT_DIR/harden-vm.sh"
+ssh "${SSH_OPTS[@]}" "root@$ip" 'bash -s' < "$CLOUD_VM_DIR/harden-vm.sh"
 
 echo "==> Installing Docker..."
 ssh "${SSH_OPTS[@]}" "$DEPLOY_USER@$ip" '

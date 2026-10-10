@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Setup for the app on a hardened Vultr instance (run harden-vm.sh first).
+# Setup for the app on a hardened Vultr instance (run cloud-vm's harden-vm.sh first).
 # Usage: ssh in as the deploy user, then run this script.
 set -euo pipefail
 
